@@ -22,3 +22,50 @@ class FakeClock:
 
     def __call__(self):
         return self.now
+
+
+class FakeRunner:
+    """Simula o ClaudeCli: devolve a resposta registada para cada esquema (pelo título) e regista os prompts."""
+
+    def __init__(self, respostas, pesquisas=(), bloquear=None):
+        self.respostas = respostas  # {"termos": dict | Exception, "mercado": dict | Exception}
+        self.pesquisas = list(pesquisas)
+        self.bloquear = bloquear  # asyncio.Event: a chamada "mercado" espera por ele
+        self.chamadas = []  # (tipo, prompt, tools)
+
+    async def run(self, prompt, schema, *, system, tools="", on_search=None):
+        tipo = schema["title"]
+        self.chamadas.append((tipo, prompt, tools))
+        if tipo == "mercado":
+            for query in self.pesquisas:
+                on_search(query)
+            if self.bloquear is not None:
+                await self.bloquear.wait()
+        resposta = self.respostas[tipo]
+        if isinstance(resposta, Exception):
+            raise resposta
+        return resposta
+
+
+class FakeMercari:
+    def __init__(self, vendidos=(), a_venda=(), erro=None):
+        self.vendidos, self.a_venda, self.erro = list(vendidos), list(a_venda), erro
+        self.termos = []
+
+    async def procurar(self, termo, n=40):
+        self.termos.append(termo)
+        if self.erro:
+            raise self.erro
+        return self.vendidos, self.a_venda
+
+
+class FakeVinted:
+    def __init__(self, anuncios=(), erro=None):
+        self.anuncios, self.erro = list(anuncios), erro
+        self.termos = []
+
+    async def procurar(self, termo):
+        self.termos.append(termo)
+        if self.erro:
+            raise self.erro
+        return self.anuncios

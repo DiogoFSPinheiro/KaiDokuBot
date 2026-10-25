@@ -63,7 +63,7 @@ def resposta_imediata(p: Pedido, c: Contas) -> str:
 
 
 MAX_RAZAO = 600
-MAX_FONTES = 4
+MAX_FONTES = 6
 _CABECALHO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença</b>",
               "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>"}  # fmt: skip
 
