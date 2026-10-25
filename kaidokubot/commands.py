@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from html import escape
 
-from kaidokubot.formatting import resposta_imediata, texto_cambio
+from kaidokubot.formatting import resposta_imediata, texto_cambio, texto_historico
 from kaidokubot.fx import Cambio, parse_taxa
 from kaidokubot.parsing import ESTADOS, PRECO_MAX, PRECO_MIN, ParseError, Pedido, e_so_preco, parse_pedido, parse_preco_moeda
 from kaidokubot.rules import contas
@@ -135,6 +135,9 @@ class Commands:
         self._esperando.pop(chat_id, None)
         pedido = self._storage.get_pedido(pedido_id)
         return Resposta(NAO_EXISTE) if pedido is None else self._imediata(pedido_id, pedido)
+
+    def historico(self) -> Resposta:
+        return Resposta(texto_historico(self._storage.ultimas_avaliacoes(10)))
 
     async def cambio(self, args: list[str]) -> str:
         if not args:

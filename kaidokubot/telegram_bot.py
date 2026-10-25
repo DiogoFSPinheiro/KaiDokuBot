@@ -190,7 +190,11 @@ def build_application(
 
     app.add_handler(CommandHandler("id", on_id))
     app.add_handler(CommandHandler(["start", "help"], on_start, filters=allowed))
+    async def on_historico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await send(update, commands.historico())
+
     app.add_handler(CommandHandler("cambio", on_cambio, filters=allowed))
+    app.add_handler(CommandHandler("historico", on_historico, filters=allowed))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & allowed, on_text))
 
     if claude is not None:

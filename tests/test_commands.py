@@ -205,3 +205,9 @@ def test_foto_com_legenda_em_euros(commands, storage):
     r = commands.foto(CHAT, Leitura("Nendoroid Frieren", None, "usado", "alta", {}, preco_eur=30.0))
     assert "€30.00" in r.texto
     assert storage.get_pedido(1).preco_eur == 30.0
+
+
+def test_historico(commands, storage):
+    assert commands.historico().texto == "Ainda não há avaliações."
+    storage.add_avaliacao(CHAT, 1, Pedido("zelda", 3980, "usado"), "k", "{}", "nao", False, now=1_000_000.0)
+    assert "🔴" in commands.historico().texto and "zelda · ¥3.980" in commands.historico().texto

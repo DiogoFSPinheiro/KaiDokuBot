@@ -223,3 +223,29 @@ def test_resumo_em_euros():
 def test_resumo_em_euros_caro_e_normal():
     assert _resumo_eur(_mercado(), 60.0).splitlines()[0] == "🔴 <b>Caro</b> · €6 acima da Europa (11%)"
     assert _resumo_eur(_mercado(), 56.0).splitlines()[0] == "🟡 <b>Preço normal</b> · €2 acima da Europa (4%)"
+
+
+# --- /historico -------------------------------------------------------------------------
+from datetime import datetime, timezone  # noqa: E402
+
+from kaidokubot.formatting import texto_historico  # noqa: E402
+
+
+def test_historico():
+    # 25/10 12:37 UTC = 21:37 em Tóquio.
+    quando = datetime(2026, 10, 25, 12, 37, tzinfo=timezone.utc).timestamp()
+    linhas = [
+        {"nome": "emilia re zero 17cm", "preco_yen": 7000, "preco_eur": None, "estado": "desconhecido",
+         "veredicto": "pouca", "da_cache": 0, "criado_em": quando},
+        {"nome": "nendoroid <frieren>", "preco_yen": 0, "preco_eur": 35.0, "estado": "selado",
+         "veredicto": "eu_bom", "da_cache": 1, "criado_em": quando - 86400},
+    ]  # fmt: skip
+    assert texto_historico(linhas).splitlines() == [
+        "🧾 <b>Últimas avaliações</b> (hora de Tóquio)",
+        "🟡 25/10 21:37 · emilia re zero 17cm · ¥7.000",
+        "🟢 24/10 21:37 · nendoroid &lt;frieren&gt; · €35.00",
+    ]
+
+
+def test_historico_vazio():
+    assert texto_historico([]) == "Ainda não há avaliações."

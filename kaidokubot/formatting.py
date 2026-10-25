@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from html import escape
+from zoneinfo import ZoneInfo
 
 from kaidokubot.fx import EstadoCambio
 from kaidokubot.parsing import Pedido
@@ -8,6 +10,8 @@ from kaidokubot.rules import (
     IMPOSTO, MINIMO_SEM_IMPOSTO, Contas, Mercado, Veredicto, abaixo_do_minimo, importar_total_eur,
     loja_curta,
 )  # fmt: skip
+
+TOKYO = ZoneInfo("Asia/Tokyo")
 
 HELP = (
     "Olá! Diz-me o artigo e o preço e eu faço as contas.\n\n"
@@ -18,7 +22,10 @@ HELP = (
     "O preço é o número com ¥/円/yen ou, se não houver, o último número. "
     "Estados: selado, novo, usado, sem caixa, caixa danificada (também em inglês e japonês: 未開封, 中古, 箱なし, 箱傷み…).\n\n"
     "📷 Também podes mandar uma foto da etiqueta ou da caixa (com o preço na legenda, se quiseres).\n\n"
-    "💡 Avaliar compara com o preço na Europa (lojas, Vinted, importar) e com o Mercari japonês; demora 1–4 min.\n\n"
+    "Cada pedido é avaliado logo: compara com o preço na Europa (lojas, Vinted, importar) e com o Mercari "
+    "japonês; demora ~30 s.\n"
+    "Em Portugal, põe o preço em euros (ex.: nendoroid frieren 35€): compara só com a Europa.\n\n"
+    "/historico – últimas 10 avaliações\n"
     "/cambio – ver o câmbio ¥→€ (/cambio 0.0058 fixa um valor, /cambio auto volta ao automático)\n"
     "/id – mostrar o chat id"
 )
@@ -248,3 +255,19 @@ def resumo(
     if criado_em is not None:
         lines.append(f"🕒 avaliado {_ha_quanto(agora - criado_em)}")
     return "\n".join(lines)
+
+
+_EMOJI = {"compensa": "🟢", "pouca": "🟡", "nao": "🔴", "incerto": "⚪", "jp_bom": "🟢", "jp_normal": "🟡",
+          "jp_caro": "🔴", "eu_bom": "🟢", "eu_normal": "🟡", "eu_caro": "🔴"}  # fmt: skip
+
+
+def texto_historico(linhas) -> str:
+    """/historico: as últimas avaliações, para rever no fim do dia (hora de Tóquio)."""
+    if not linhas:
+        return "Ainda não há avaliações."
+    out = ["🧾 <b>Últimas avaliações</b> (hora de Tóquio)"]
+    for linha in linhas:
+        quando = datetime.fromtimestamp(linha["criado_em"], TOKYO).strftime("%d/%m %H:%M")
+        preco = fmt_eur(linha["preco_eur"]) if linha["preco_eur"] is not None else fmt_yen(linha["preco_yen"])
+        out.append(f"{_EMOJI.get(linha['veredicto'], '⚪')} {quando} · {escape(linha['nome'])} · {preco}")
+    return "\n".join(out)
