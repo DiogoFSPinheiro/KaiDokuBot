@@ -36,11 +36,11 @@ class FakeRunner:
     async def run(self, prompt, schema, *, system, tools="", on_search=None):
         tipo = schema["title"]
         self.chamadas.append((tipo, prompt, tools))
-        if tipo == "mercado":
+        if on_search is not None:
             for query in self.pesquisas:
                 on_search(query)
-            if self.bloquear is not None:
-                await self.bloquear.wait()
+        if tipo == "mercado" and self.bloquear is not None:
+            await self.bloquear.wait()
         resposta = self.respostas[tipo]
         if isinstance(resposta, Exception):
             raise resposta

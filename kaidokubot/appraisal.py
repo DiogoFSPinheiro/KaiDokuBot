@@ -38,10 +38,11 @@ SCHEMA_TERMOS = {
     "title": "termos",
     "type": "object",
     "properties": {
-        "termo_jp": {"type": "string", "description": "Como aparece nos anúncios do Mercari Japão, 2–4 palavras"},
-        "termo_en": {"type": "string", "description": "Como apareceria num anúncio europeu, 2–4 palavras"},
+        "produto": {"type": "string", "description": "Produto exato: fabricante + linha + personagem (+ nº/tamanho)"},
+        "termo_jp": {"type": "string", "description": "Como aparece nos anúncios do Mercari Japão, específico"},
+        "termo_en": {"type": "string", "description": "Como apareceria num anúncio europeu, específico"},
     },
-    "required": ["termo_jp", "termo_en"],
+    "required": ["produto", "termo_jp", "termo_en"],
 }
 
 SCHEMA_MERCADO = {
@@ -89,10 +90,15 @@ SCHEMA_MERCADO = {
 
 def prompt_termos(pedido: Pedido) -> str:
     return (
-        f"Artigo escrito por um turista (pode estar em português, inglês, romaji ou japonês): «{pedido.nome}».\n"
-        "termo_jp: o nome como aparece nos anúncios do Mercari Japão, curto e sem estado nem preço "
-        "(ex.: ねんどろいど フリーレン, ポップアップパレード フェルン, ゼルダの伝説 ティアーズオブザキングダム).\n"
-        "termo_en: o nome em inglês como apareceria num anúncio europeu (ex.: nendoroid frieren, zelda tears of the kingdom)."
+        f"Artigo escrito à pressa por um turista numa loja no Japão (pt, inglês, romaji ou japonês): «{pedido.nome}».\n"
+        "Identifica o produto EXATO: fabricante, linha/série, personagem, nº ou tamanho. Faz 1 ou 2 pesquisas na web "
+        "se o nome for ambíguo (ex.: «emilia 17cm» pode ser a Good Smile KADOKAWA Collection Light, uma Pop Up "
+        "Parade ou uma figura de prémio da SEGA/Taito; escolhe a que bate certo com os detalhes e com o preço "
+        f"de ¥{pedido.preco_yen}).\n"
+        "produto: nome curto e exato (ex.: «GSC KADOKAWA Collection Light Emilia», «Nendoroid 2367 Frieren»).\n"
+        "termo_jp: como aparece nos anúncios do Mercari Japão, específico o suficiente para não apanhar outras "
+        "figuras da mesma personagem (ex.: «KADOKAWA Collection LIGHT エミリア», «ねんどろいど フリーレン 2367»).\n"
+        "termo_en: como apareceria num anúncio europeu, também específico (ex.: «kadokawa collection light emilia»)."
     )
 
 
@@ -107,7 +113,8 @@ def prompt_mercado(
     vinted: list[Anuncio] | None,
 ) -> str:  # fmt: skip
     lines = [
-        f"Artigo: {pedido.nome} (termo japonês: {termos['termo_jp']}; inglês: {termos['termo_en']}).",
+        f"Artigo: {pedido.nome}. Produto identificado: {termos.get('produto') or pedido.nome} "
+        f"(termo japonês: {termos['termo_jp']}; inglês: {termos['termo_en']}).",
         f"Estado: {pedido.estado}.",
         f"Estou numa loja no Japão e custa {fmt_yen(pedido.preco_yen)} (preço de montra, com imposto). "
         "Quero saber quanto me custaria na Europa (vivo em Portugal) e se o preço é normal para o Japão.",
@@ -121,20 +128,22 @@ def prompt_mercado(
         "Vinted (Europa; preços pedidos em € com a proteção do comprador, sem portes):",
         *_lista(vinted, fmt_eur),
         "",
-        "Muitos destes anúncios não são comparáveis (outro artigo ou personagem, minis/さぷらいず, lotes, "
-        "peças soltas, outro estado): ignora-os.",
+        "Só contam anúncios do MESMO produto (mesmo fabricante, linha e tamanho). Ignora outros artigos ou "
+        "personagens, minis/さぷらいず, lotes, peças soltas, outro estado e, se o artigo não for uma, figuras de "
+        "prémio (SEGA, Taito, FuRyu, Banpresto, 一番くじ, GiGO). Com menos de 3 comparáveis numa fonte, usa null "
+        "nessa fonte em vez de comparar com outra coisa.",
         "1. Mercari: intervalo típico (¥) dos VENDIDOS comparáveis no mesmo estado (jp_min_yen, jp_max_yen, jp_n). "
         "Se não houver vendidos comparáveis, usa os à venda e jp_so_pedidos=true.",
         "2. Vinted: intervalo típico (€) dos anúncios comparáveis no mesmo estado (vinted_min_eur, vinted_max_eur, "
         "vinted_n) e a mediana desses anúncios (vinted_tipico_eur).",
         "3. Pesquisar na web é obrigatório (2 a 5 pesquisas, em inglês e japonês): o preço novo mais baixo numa "
-        "loja europeia que envie para Portugal (ex.: Amazon.es/.de/.fr, Fnac, JapanDco, Nin-Nin-Game, Figurine "
+        "loja europeia que envie para Portugal (pesquisa o nome exato com «amazon.es» e com «€»; ex.: Amazon.es/.de/.fr, Fnac, JapanDco, Nin-Nin-Game, Figurine "
         "Universe; para jogos e consolas também KuantoKusta e Worten) e o preço numa loja online japonesa que envie "
         "para a Europa (AmiAmi, HobbySearch, Good Smile Online, Play-Asia), em ienes. Só preços ATUAIS vistos na "
         "página da própria loja: nada de notícias, promoções acabadas ou preços de lançamento (PVP).",
         "4. Ajusta ao estado: selado/novo compara com novos; usado, sem caixa ou caixa danificada valem menos. "
         "Com estado desconhecido, preenche cenarios com os cenários principais (ex.: selado e usado) e usa nos "
-        "campos principais o mais provável numa loja de usados. Senão, cenarios fica vazio.",
+        "campos principais o cenário usado. Senão, cenarios fica vazio.",
         "5. Nunca inventes números: null no que não encontrares. razao: no máximo 2 frases curtas para ler de pé "
         "numa loja (de onde vêm os números e se só havia preços pedidos). fontes: 2 a 4 páginas que usaste.",
     ]
@@ -153,6 +162,7 @@ def mercado_de(dados: dict, termos: dict, avisos: list[str]) -> Mercado:
         return Mercado(
             termo_jp=str(termos["termo_jp"]),
             termo_en=str(termos["termo_en"]),
+            produto=str(termos.get("produto") or ""),
             novo_eu_eur=_numero(dados["novo_eu_eur"]),
             novo_eu_loja=dados.get("novo_eu_loja") or None,
             vinted_min_eur=_numero(dados["vinted_min_eur"]),
@@ -270,12 +280,15 @@ class Avaliador:
         if detalhes:
             texto = resultado(pedido, c, mercado, veredicto, recolhido, agora)
             return Resposta(texto, [[("📌 Resumo", f"res:{avaliacao_id}"), *acoes]], pedido_id)
-        texto = resumo(c, mercado, veredicto, recolhido, agora)
+        texto = resumo(c, mercado, veredicto, recolhido, agora, estado=pedido.estado)
         return Resposta(texto, [[("📋 Detalhes", f"det:{avaliacao_id}"), *acoes]], pedido_id)
 
     async def _pesquisar(self, pedido: Pedido, progresso: Callable[[str], None]) -> Mercado:
         progresso("🈂️ A preparar a pesquisa…")
-        termos = await self._runner.run(prompt_termos(pedido), SCHEMA_TERMOS, system=SYSTEM_TERMOS)
+        termos = await self._runner.run(
+            prompt_termos(pedido), SCHEMA_TERMOS, system=SYSTEM_TERMOS, tools="WebSearch",
+            on_search=lambda query: progresso(f"🔍 A identificar: {query}"),
+        )  # fmt: skip
         if not termos.get("termo_jp") or not termos.get("termo_en"):
             raise ClaudeError("resposta incompleta do Claude")
         progresso(f"🔎 A procurar no Mercari ({termos['termo_jp']}) e na Vinted ({termos['termo_en']})…")
@@ -311,8 +324,8 @@ class Avaliador:
             system=SYSTEM_MERCADO, tools="WebSearch", on_search=on_search,
         )  # fmt: skip
         mercado = mercado_de(dados, termos, avisos)
-        # Links para eu ver os anúncios do Mercari e da Vinted.
-        extras = []
+        # Links para eu ver os anúncios do Mercari e da Vinted, e a Amazon.es, que bloqueia acessos automáticos.
+        extras = [{"nome": "Amazon.es", "url": f"https://www.amazon.es/s?k={quote_plus(mercado.termo_en)}"}]
         if vendidos is not None:
             url = f"https://jp.mercari.com/search?keyword={quote_plus(mercado.termo_jp)}&status=sold_out"
             extras.append({"nome": "Mercari vendidos", "url": url})

@@ -32,7 +32,7 @@ def _mercado(**overrides):
         termo_jp="ねんどろいど フリーレン", termo_en="nendoroid frieren 2367",
         novo_eu_eur=54.9, novo_eu_loja="JapanDco", vinted_min_eur=45.0, vinted_max_eur=65.0, vinted_n=12,
         importar_yen=6500.0, importar_loja="AmiAmi", jp_min_yen=3900.0, jp_max_yen=4500.0, jp_n=8,
-        jp_so_pedidos=False, cenarios=[], razao="Razão.", fontes=[], avisos=[], vinted_tipico_eur=50.0,
+        jp_so_pedidos=False, cenarios=[], razao="Razão.", fontes=[], avisos=[], vinted_tipico_eur=50.0, produto="Nendoroid 2367 Frieren",
     )  # fmt: skip
     campos.update(overrides)
     return Mercado(**campos)
@@ -102,3 +102,8 @@ def test_cache_antiga_sem_tipico_continua_a_ler():
     dados = _mercado().to_dict()
     del dados["vinted_tipico_eur"]
     assert Mercado.from_dict(dados).vinted_tipico_eur is None
+
+
+def test_caro_no_japao_exige_pelo_menos_3_comparaveis():
+    assert calcular_veredicto(_mercado(jp_n=2), contas(4800, TAXA), TAXA, 20).caro_no_japao is False
+    assert calcular_veredicto(_mercado(jp_n=3), contas(4800, TAXA), TAXA, 20).caro_no_japao is True

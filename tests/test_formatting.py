@@ -57,6 +57,7 @@ def test_resultado_completo():
     m = _mercado(fontes=[{"nome": "JapanDco", "url": "https://j.example/x"}, {"nome": "Vinted <pt>", "url": "https://v"}])
     assert _resultado(m).splitlines() == [
         "📦 <b>nendoroid frieren</b> · ¥4.800 → €24.86 após reembolso",
+        "🔍 Nendoroid 2367 Frieren",
         "🟢 <b>Compensa</b> — poupas €29.14 (54%) face a Vinted (€54.00)",
         "💴 Pagaria no máximo ¥8.300",
         "🇪🇺 Novo €54.90 (JapanDco) · Vinted ~€50.00 + portes (€45.00–65.00, 12) · importar ~€62.51 (AmiAmi)",
@@ -71,7 +72,7 @@ def test_resultado_nao_compensa_e_so_pedidos():
     m = _mercado(vinted_min_eur=16.0, vinted_max_eur=None, vinted_tipico_eur=16.0, novo_eu_eur=None, importar_yen=None,
                  jp_so_pedidos=True, jp_max_yen=6000.0, avisos=["Vinted indisponível"])  # fmt: skip
     linhas = _resultado(m).splitlines()
-    assert linhas[1] == "🔴 <b>Não compensa</b> — €4.86 mais caro que Vinted (€20.00)"
+    assert linhas[2] == "🔴 <b>Não compensa</b> — €4.86 mais caro que Vinted (€20.00)"
     assert "🇪🇺 Vinted ~€16.00 + portes (12)" in linhas
     assert "🇯🇵 Mercari à venda ¥3.900–6.000 (só anúncios, sem vendas)" in linhas
     assert "⚠️ Vinted indisponível" in linhas
@@ -82,7 +83,7 @@ def test_resultado_incerto():
                  importar_yen=None,
                  jp_min_yen=None, jp_max_yen=None, jp_n=0)  # fmt: skip
     linhas = _resultado(m).splitlines()
-    assert linhas[1] == "⚪ <b>Incerto</b> — sem preços europeus fiáveis"
+    assert linhas[2] == "⚪ <b>Incerto</b> — sem preços europeus fiáveis"
     assert not any(l.startswith(("💴", "🇪🇺", "🇯🇵")) for l in linhas)
 
 
@@ -110,9 +111,9 @@ def test_nome_da_loja_longo_e_cortado():
 
 
 # --- resumo compacto ----------------------------------------------------------------
-def _resumo(m, criado_em=None, agora=1_000_000.0, taxa=TAXA, preco=4800):
+def _resumo(m, criado_em=None, agora=1_000_000.0, taxa=TAXA, preco=4800, estado="selado"):
     c = contas(preco, taxa)
-    return resumo(c, m, calcular_veredicto(m, c, taxa, 20), criado_em, agora)
+    return resumo(c, m, calcular_veredicto(m, c, taxa, 20), criado_em, agora, estado=estado)
 
 
 def test_resumo_compacto():
@@ -120,13 +121,18 @@ def test_resumo_compacto():
         "🟢 <b>Compensa</b> · poupas €29 (54%)",
         "💴 Máximo ¥8.300",
         "🇪🇺 Vinted ~€50 · novo €55 (JapanDco) · importar ~€63",
-        "🇯🇵 Mercari ¥3.900–4.500 · 👀 caro aqui",
+        "🇯🇵 Mercari ¥3.900–4.500 (8) · 👀 caro aqui",
+        "🔍 Nendoroid 2367 Frieren",
     ]
+
+
+def test_resumo_estado_desconhecido_avisa():
+    assert "❔ Sem estado: comparei como usado (✏️ Corrigir para afinar)" in _resumo(_mercado(), estado="desconhecido").splitlines()
 
 
 def test_resumo_nao_compensa_sem_japao_com_avisos_e_cache():
     m = _mercado(vinted_tipico_eur=16.0, novo_eu_eur=None, importar_yen=None, jp_min_yen=None, jp_max_yen=None,
-                 avisos=["Mercari indisponível"])  # fmt: skip
+                 avisos=["Mercari indisponível"], produto="")  # fmt: skip
     assert _resumo(m, criado_em=1_000_000.0 - 2 * 86400).splitlines() == [
         "🔴 <b>Não compensa</b> · €5 mais caro que na Europa",
         "💴 Máximo ¥3.000",
@@ -138,8 +144,8 @@ def test_resumo_nao_compensa_sem_japao_com_avisos_e_cache():
 
 def test_resumo_incerto_e_so_pedidos():
     m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None,
-                 importar_yen=None, jp_so_pedidos=True, jp_max_yen=4900.0)  # fmt: skip
+                 importar_yen=None, jp_so_pedidos=True, jp_max_yen=4900.0, produto="")  # fmt: skip
     assert _resumo(m).splitlines() == [
         "⚪ <b>Incerto</b> · sem preços europeus fiáveis",
-        "🇯🇵 Mercari à venda ¥3.900–4.900",
+        "🇯🇵 Mercari à venda ¥3.900–4.900 (8)",
     ]

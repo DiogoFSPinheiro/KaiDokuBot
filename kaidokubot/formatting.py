@@ -65,7 +65,7 @@ def resposta_imediata(p: Pedido, c: Contas) -> str:
 
 
 MAX_RAZAO = 600
-MAX_FONTES = 6
+MAX_FONTES = 7
 _CABECALHO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença</b>",
               "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>"}  # fmt: skip
 
@@ -128,7 +128,10 @@ def resultado(p: Pedido, c: Contas, m: Mercado, v: Veredicto, criado_em: float |
     """Resultado da avaliação (HTML). criado_em != None quando vem da cache."""
     taxa = c.montra_eur / c.montra_yen if c.montra_eur is not None else None
     liquido = f" → {fmt_eur(c.liquido_eur)} após reembolso" if c.liquido_eur is not None else ""
-    lines = [f"📦 <b>{escape(p.nome)}</b> · {fmt_yen(c.montra_yen)}{liquido}", _linha_veredicto(v)]
+    lines = [f"📦 <b>{escape(p.nome)}</b> · {fmt_yen(c.montra_yen)}{liquido}"]
+    if m.produto:
+        lines.append(f"🔍 {escape(m.produto)}")
+    lines.append(_linha_veredicto(v))
     if v.max_montra_yen and v.max_montra_yen > 0:
         lines.append(f"💴 Pagaria no máximo {fmt_yen(v.max_montra_yen)}")
     lines += [linha for linha in (_linha_europa(m, taxa), _linha_japao(m)) if linha]
@@ -159,7 +162,9 @@ _CURTO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença
           "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>"}  # fmt: skip
 
 
-def resumo(c: Contas, m: Mercado, v: Veredicto, criado_em: float | None, agora: float) -> str:
+def resumo(
+    c: Contas, m: Mercado, v: Veredicto, criado_em: float | None, agora: float, *, estado: str = "desconhecido"
+) -> str:
     """Resultado compacto para ler de pé na loja (o artigo já aparece citado por cima)."""
     taxa = c.montra_eur / c.montra_yen if c.montra_eur is not None else None
     cabecalho = _CURTO[v.codigo]
@@ -183,8 +188,12 @@ def resumo(c: Contas, m: Mercado, v: Veredicto, criado_em: float | None, agora: 
         lines.append("🇪🇺 " + " · ".join(europa))
     jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
     if jp:
-        linha = f"🇯🇵 Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp}"
+        linha = f"🇯🇵 Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp} ({m.jp_n})"
         lines.append(linha + (" · 👀 caro aqui" if v.caro_no_japao else ""))
+    if m.produto:
+        lines.append(f"🔍 {escape(m.produto)}")
+    if estado == "desconhecido":
+        lines.append("❔ Sem estado: comparei como usado (✏️ Corrigir para afinar)")
     lines += [f"⚠️ {escape(aviso)}" for aviso in m.avisos]
     if criado_em is not None:
         lines.append(f"🕒 avaliado {_ha_quanto(agora - criado_em)}")

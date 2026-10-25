@@ -22,6 +22,8 @@ TAXA_CTT_EUR = 2.65  # ~€2,15 + IVA
 PORTES_VINTED_EUR = 4.0
 # --------------------------------------------------------------------------------------------
 
+MIN_COMPARAVEIS_JP = 3
+
 
 @dataclass(frozen=True)
 class Contas:
@@ -80,6 +82,7 @@ class Mercado:
     fontes: list[dict] = field(default_factory=list)  # {nome, url}
     avisos: list[str] = field(default_factory=list)
     vinted_tipico_eur: float | None = None  # mediana dos comparáveis (o mínimo costuma ser um outlier)
+    produto: str = ""  # produto exato identificado (fabricante, linha, tamanho)
 
     @property
     def vinted_eur(self) -> float | None:
@@ -132,7 +135,8 @@ def alternativas(m: Mercado, taxa: float) -> list[tuple[str, float]]:
 
 
 def calcular_veredicto(m: Mercado, c: Contas, taxa: float | None, margem_pct: int) -> Veredicto:
-    caro = m.jp_max_yen is not None and c.montra_yen > m.jp_max_yen
+    # Com poucos vendidos comparáveis o intervalo do Mercari não é fiável.
+    caro = m.jp_max_yen is not None and m.jp_n >= MIN_COMPARAVEIS_JP and c.montra_yen > m.jp_max_yen
     if taxa is None or c.liquido_eur is None:
         return Veredicto("incerto", None, None, None, None, caro, "câmbio indisponível")
     opcoes = alternativas(m, taxa)

@@ -11,7 +11,7 @@ from kaidokubot.storage import Storage
 from tests.fakes import FakeClock, FakeHttp, FakeMercari, FakeRunner, FakeVinted
 
 TAXA = 0.0056979
-TERMOS = {"termo_jp": "ねんどろいど フリーレン", "termo_en": "nendoroid frieren"}
+TERMOS = {"produto": "Nendoroid 2367 Frieren", "termo_jp": "ねんどろいど フリーレン", "termo_en": "nendoroid frieren"}
 MERCADO = {
     "novo_eu_eur": 54.9, "novo_eu_loja": "JapanDco", "vinted_min_eur": 45.0, "vinted_max_eur": 65.0, "vinted_n": 3,
     "importar_yen": 6500, "importar_loja": "AmiAmi", "jp_min_yen": 3900, "jp_max_yen": 4500, "jp_n": 8,
@@ -47,9 +47,11 @@ async def test_avaliacao_completa(storage):
     assert r.texto.splitlines()[0].startswith("🟢 <b>Compensa</b>")
     assert r.botoes == [[("📋 Detalhes", "det:1"), ("🔄 Reavaliar", "rv:1"), ("✏️ Corrigir", "fix:1")]]
     assert (mercari.termos, vinted.termos) == (["ねんどろいど フリーレン"], ["nendoroid frieren"])
-    assert [tipo for tipo, _, _ in runner.chamadas] == ["termos", "mercado"]
-    _, prompt, tools = runner.chamadas[1]
-    assert tools == "WebSearch"
+    assert [(tipo, tools) for tipo, _, tools in runner.chamadas] == [("termos", "WebSearch"), ("mercado", "WebSearch")]
+    _, prompt, _ = runner.chamadas[1]
+    assert "Produto identificado: Nendoroid 2367 Frieren" in prompt
+    assert any("🔍 A identificar: nendoroid frieren prix" in p for p in progresso)
+    assert "🔍 Nendoroid 2367 Frieren" in r.texto
     assert "ねんどろいど フリーレン 2367 | ¥4.200 | novo" in prompt
     assert "Nendoroid Frieren 2367 | €63.70 | Novo com etiquetas" in prompt
     assert "¥4.800" in prompt and "selado" in prompt
@@ -64,6 +66,8 @@ async def test_fontes_do_mercari_e_vinted_acrescentadas(storage):
     r = avaliador.mostrar(1, detalhes=True)
     assert "jp.mercari.com/search?keyword=" in r.texto
     assert "www.vinted.pt/catalog?search_text=nendoroid+frieren" in r.texto
+    # A Amazon.es bloqueia acessos automáticos: fica um link para confirmar à mão.
+    assert '<a href="https://www.amazon.es/s?k=nendoroid+frieren">Amazon.es</a>' in r.texto
 
 
 async def test_segunda_vez_usa_cache_com_o_preco_atual(storage):
