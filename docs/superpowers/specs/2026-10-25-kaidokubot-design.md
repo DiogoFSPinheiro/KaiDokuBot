@@ -127,6 +127,12 @@ Pipeline (uma mensagem de progresso que responde ao pedido e é editada no máxi
 - Devolve nome (pt/en), termo japonês, preço, estado, confiança; mostra "📷 Percebi: …" com «💡 Avaliar» e «✏️ Corrigir». Confiança baixa ou sem preço → pede correção.
 - **Só as fotos pedem confirmação** (decisão do utilizador, 25/10): a leitura da etiqueta pode falhar, por isso a avaliação só arranca quando carrego em «💡 Avaliar» (ou depois de corrigir). O texto é escrito por mim e avalia logo (`AUTO_AVALIAR=1`).
 
+## 8. Modo Europa (preço em €)
+- Para usar também em Portugal. Um preço com `€`/`eur`/`euros` (aceita cêntimos: `29,99€`; `1.299€` = mil e tal) cria um pedido em euros; sem moeda ou com ¥ fica o modo Japão.
+- Resposta imediata só com o preço e o estado (sem câmbio nem tax-free).
+- Avaliação sem Mercari nem importação: Vinted (típico + portes) e preço novo (KuantoKusta / web). Cache separada da do Japão.
+- Veredicto face à alternativa europeia mais barata: 🟢 bom preço (≥ 10% abaixo), 🟡 preço normal (±10%), 🔴 caro (> 10% acima); `💶 Máximo` = essa alternativa.
+
 ## 7. Histórico e comandos (fase 4)
 - Cada avaliação fica no SQLite; `/historico` mostra as últimas 10: data, nome, preço, veredicto.
 - Comandos: `/start`, `/help`, `/id`, `/cambio`, `/historico`.
@@ -139,8 +145,9 @@ Pipeline (uma mensagem de progresso que responde ao pedido e é editada no máxi
 0. ✅ Verificação: fotos e progresso em stream-json funcionam; Claude sozinho não chega a vendas concluídas japonesas; Mercari via `mercapi` funciona.
 1. ✅ Esqueleto, config, parsing, contas, câmbio + `/cambio`, resposta imediata com «Corrigir», `/start` `/help` `/id`.
 2. ✅ Avaliação por IA (identificação + Mercari + Vinted + KuantoKusta + web) com progresso, fila, cache e limite diário; avaliação automática do texto; resumo compacto com links.
-3. Fotos da etiqueta.
-4. Histórico, `README.md` / `CLAUDE.md`, `kaidokubot.sh` + `deploy.sh`, instalação no Pi.
+3. ✅ Fotos da etiqueta ou da caixa (leitura ~4 s; a avaliação aproveita a identificação da foto).
+4. ✅ `/historico`, `README.md` / `CLAUDE.md`, `kaidokubot.sh` + `deploy.sh`, guia de instalação no Pi.
+5. ✅ Modo Europa (preço em €), pedido pelo utilizador depois da fase 3.
 
 ## Decisões minhas (a rever)
 - `CLAUDE_MODEL=sonnet`; timeout 300 s; limite 30/dia; dia de Tóquio.
