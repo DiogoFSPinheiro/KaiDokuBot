@@ -18,6 +18,11 @@ from kaidokubot.parsing import ParseError, Pedido, parse_estado, parse_pedido, p
         ("Pokémon Scarlet 4,980 JPY caixa danificada", Pedido("Pokémon Scarlet", 4980, "caixa danificada")),
         ("nezuko nedoroid 5000 yen caixa ok", Pedido("nezuko nedoroid", 5000, "usado")),
         ("figura 3000 com caixa", Pedido("figura", 3000, "usado")),
+        ("emilia re zero 17cm 7000", Pedido("emilia re zero 17cm", 7000, "desconhecido")),
+        ("emilia 17 cm 7000", Pedido("emilia 17 cm", 7000, "desconhecido")),
+        ("figura escala 1/7 12800", Pedido("figura escala 1/7", 12800, "desconhecido")),
+        ("peluche 30㎝ 2500", Pedido("peluche 30cm", 2500, "desconhecido")),
+        ("nendoroid 2367 in box", Pedido("nendoroid in box", 2367, "desconhecido")),
     ],
 )
 def test_parse_pedido(texto, esperado):
@@ -53,7 +58,7 @@ def test_sem_nome_da_erro():
         parse_pedido("4800 selado")
 
 
-@pytest.mark.parametrize("texto", ["figura 0", "figura 99999999"])
+@pytest.mark.parametrize("texto", ["figura 0", "figura 50", "figura 99999999"])
 def test_preco_fora_de_limites(texto):
     with pytest.raises(ParseError, match="preço"):
         parse_pedido(texto)
@@ -62,3 +67,17 @@ def test_preco_fora_de_limites(texto):
 def test_parse_preco_isolado():
     assert parse_preco("¥3.980") == 3980
     assert parse_preco("sem número") is None
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Good Smile Company Emilia Figura 17 cm re: Zero Starting Life in Another World kadokawa Collection Light",
+        "figura escala 1/7",
+        "peluche 30cm",
+        "figura 250g",
+    ],
+)
+def test_medidas_e_escalas_nao_sao_preco(texto):
+    with pytest.raises(ParseError, match="Falta o preço"):
+        parse_pedido(texto)

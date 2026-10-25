@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 ESTADOS: tuple[str, ...] = ("selado", "novo", "usado", "sem caixa", "caixa danificada", "desconhecido")
 
-PRECO_MIN = 1
+PRECO_MIN = 100  # nada custa menos (um gashapon custa ¥200+); evita apanhar medidas soltas
 PRECO_MAX = 10_000_000
 
 # Palavras-chave por estado (pt-PT / inglês / japonês). Comparadas sem distinguir maiúsculas.
@@ -48,6 +48,9 @@ _RE_PRECO = re.compile(
     re.IGNORECASE,
 )
 
+# Unidade a seguir a um número (com ou sem espaço) ou o início de uma escala («1/7»).
+_RE_UNIDADE = re.compile(r"\s*(?:(?:cm|mm|kg|g|ml|inch)(?![a-z])|センチ|号|/)", re.IGNORECASE)
+
 
 class ParseError(Exception):
     """Erro com uma mensagem pronta a mostrar ao utilizador."""
@@ -65,8 +68,13 @@ def _normalizar(texto: str) -> str:
     return unicodedata.normalize("NFKC", texto)
 
 
+def _e_medida(texto: str, match: re.Match) -> bool:
+    """«17 cm», «250 g», escalas «1/7»: números que não são o preço."""
+    return bool(_RE_UNIDADE.match(texto, match.end())) or texto[: match.start()].endswith("/")
+
+
 def _encontrar_preco(texto: str) -> re.Match | None:
-    matches = list(_RE_PRECO.finditer(texto))
+    matches = [m for m in _RE_PRECO.finditer(texto) if m["pre"] or m["pos"] or not _e_medida(texto, m)]
     marcados = [m for m in matches if m["pre"] or m["pos"]]
     if marcados:
         return marcados[-1]
