@@ -69,3 +69,8 @@ class FakeVinted:
         if self.erro:
             raise self.erro
         return self.anuncios
+
+
+
+class FakeKuantoKusta(FakeVinted):
+    pass

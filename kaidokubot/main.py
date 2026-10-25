@@ -7,7 +7,7 @@ import sys
 from kaidokubot.appraisal import Avaliador
 from kaidokubot.claude import ClaudeCli
 from kaidokubot.config import ConfigError, load_settings
-from kaidokubot.fontes import Mercari, Vinted
+from kaidokubot.fontes import KuantoKusta, Mercari, Vinted
 from kaidokubot.fx import Cambio, HttpJson
 from kaidokubot.storage import Storage
 from kaidokubot.telegram_bot import build_application
@@ -31,10 +31,10 @@ def main() -> None:
     recursos: list = [http]
     avaliador = None
     if settings.claude_bin and settings.max_avaliacoes_dia > 0:
-        mercari, vinted = Mercari(), Vinted()
-        recursos += [mercari, vinted]
+        mercari, vinted, kuantokusta = Mercari(), Vinted(), KuantoKusta()
+        recursos += [mercari, vinted, kuantokusta]
         avaliador = Avaliador(
-            storage, cambio, ClaudeCli(settings.claude_bin, settings.claude_model), mercari, vinted,
+            storage, cambio, ClaudeCli(settings.claude_bin, settings.claude_model), mercari, vinted, kuantokusta,
             max_dia=settings.max_avaliacoes_dia, margem=settings.margem_minima, cache_dias=settings.cache_dias,
         )  # fmt: skip
         logging.info("Avaliação por IA ativa (%s, modelo %s)", settings.claude_bin, settings.claude_model)

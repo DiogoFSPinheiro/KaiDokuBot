@@ -32,7 +32,7 @@ def _mercado(**overrides):
         termo_jp="ねんどろいど フリーレン", termo_en="nendoroid frieren 2367",
         novo_eu_eur=54.9, novo_eu_loja="JapanDco", vinted_min_eur=45.0, vinted_max_eur=65.0, vinted_n=12,
         importar_yen=6500.0, importar_loja="AmiAmi", jp_min_yen=3900.0, jp_max_yen=4500.0, jp_n=8,
-        jp_so_pedidos=False, cenarios=[], razao="Razão.", fontes=[], avisos=[], vinted_tipico_eur=50.0, produto="Nendoroid 2367 Frieren",
+        jp_so_pedidos=False, cenarios=[], razao="Razão.", fontes=[], avisos=[], vinted_tipico_eur=50.0, produto="Nendoroid Frieren 2367",
     )  # fmt: skip
     campos.update(overrides)
     return Mercado(**campos)

@@ -8,10 +8,11 @@ from kaidokubot.fontes import Anuncio, FonteError
 from kaidokubot.fx import Cambio
 from kaidokubot.parsing import Pedido
 from kaidokubot.storage import Storage
-from tests.fakes import FakeClock, FakeHttp, FakeMercari, FakeRunner, FakeVinted
+from tests.fakes import FakeClock, FakeHttp, FakeKuantoKusta, FakeMercari, FakeRunner, FakeVinted
 
 TAXA = 0.0056979
-TERMOS = {"produto": "Nendoroid 2367 Frieren", "termo_jp": "ねんどろいど フリーレン", "termo_en": "nendoroid frieren"}
+TERMOS = {"fabricante": "Good Smile Company", "linha": "Nendoroid", "personagem": "Frieren", "referencia": "2367",
+          "termo_jp": "ねんどろいど フリーレン", "termo_en": "nendoroid frieren"}
 MERCADO = {
     "novo_eu_eur": 54.9, "novo_eu_loja": "JapanDco", "vinted_min_eur": 45.0, "vinted_max_eur": 65.0, "vinted_n": 3,
     "importar_yen": 6500, "importar_loja": "AmiAmi", "jp_min_yen": 3900, "jp_max_yen": 4500, "jp_n": 8,
@@ -20,13 +21,14 @@ MERCADO = {
 }  # fmt: skip
 
 
-def _avaliador(storage, runner=None, mercari=None, vinted=None, max_dia=30, clock=None):
+def _avaliador(storage, runner=None, mercari=None, vinted=None, max_dia=30, clock=None, kuantokusta=None):
     cambio = Cambio(storage, FakeHttp(), now=FakeClock())
     cambio.definir_manual(TAXA)
     return Avaliador(
         storage, cambio, runner or FakeRunner({"termos": TERMOS, "mercado": MERCADO}, pesquisas=["q1"]),
         mercari or FakeMercari([Anuncio("ねんどろいど フリーレン 2367", 4200, "novo")], [Anuncio("x", 6800, "novo")]),
         vinted or FakeVinted([Anuncio("Nendoroid Frieren 2367", 63.7, "Novo com etiquetas")]),
+        kuantokusta or FakeKuantoKusta([Anuncio("Good Smile Nendoroid Frieren", 49.9, "novo · 3 lojas · Figuras")]),
         max_dia=max_dia, margem=20, cache_dias=30, now=clock or FakeClock(),
     )  # fmt: skip
 
@@ -49,9 +51,10 @@ async def test_avaliacao_completa(storage):
     assert (mercari.termos, vinted.termos) == (["ねんどろいど フリーレン"], ["nendoroid frieren"])
     assert [(tipo, tools) for tipo, _, tools in runner.chamadas] == [("termos", "WebSearch"), ("mercado", "WebSearch")]
     _, prompt, _ = runner.chamadas[1]
-    assert "Produto identificado: Nendoroid 2367 Frieren" in prompt
+    assert "Produto identificado: Good Smile Company Nendoroid Frieren 2367" in prompt
+    assert "Good Smile Nendoroid Frieren | €49.90 | novo · 3 lojas · Figuras" in prompt
     assert any("🔍 A identificar: nendoroid frieren prix" in p for p in progresso)
-    assert "🔍 Nendoroid 2367 Frieren" in r.texto
+    assert "🔍 Nendoroid Frieren 2367" in r.texto
     assert "ねんどろいど フリーレン 2367 | ¥4.200 | novo" in prompt
     assert "Nendoroid Frieren 2367 | €63.70 | Novo com etiquetas" in prompt
     assert "¥4.800" in prompt and "selado" in prompt
@@ -66,6 +69,7 @@ async def test_fontes_do_mercari_e_vinted_acrescentadas(storage):
     r = avaliador.mostrar(1, detalhes=True)
     assert "jp.mercari.com/search?keyword=" in r.texto
     assert "www.vinted.pt/catalog?search_text=nendoroid+frieren" in r.texto
+    assert "www.kuantokusta.pt/search?q=nendoroid+frieren" in r.texto
     # A Amazon.es bloqueia acessos automáticos: fica um link para confirmar à mão.
     assert '<a href="https://www.amazon.es/s?k=nendoroid+frieren">Amazon.es</a>' in r.texto
 
@@ -198,3 +202,25 @@ async def test_cache_pelo_produto_identificado(storage):
     # E da próxima vez o texto novo já acerta logo na cache, sem identificar.
     await avaliador.avaliar(1, 2, False, lambda _: None)
     assert len(runner.chamadas) == 3
+
+
+
+async def test_cache_pelo_produto_ignora_descricoes_extra(storage):
+    # O Claude descreve o produto de formas diferentes; a chave usa só linha + personagem + referência.
+    clock = FakeClock()
+    termos2 = {**TERMOS, "fabricante": "GSC", "termo_en": "nendoroid frieren 2367 figure"}
+    runner = FakeRunner({"termos": TERMOS, "mercado": MERCADO})
+    avaliador = _avaliador(storage, runner, clock=clock)
+    await avaliador.avaliar(1, 1, False, lambda _: None)
+    runner.respostas["termos"] = termos2
+    storage.add_pedido(1, Pedido("frieren nendo", 4800, "selado"))
+    r = await avaliador.avaliar(1, 2, False, lambda _: None)
+    assert [tipo for tipo, _, _ in runner.chamadas] == ["termos", "mercado", "termos"]
+    assert "🕒" in r.texto
+
+
+async def test_kuantokusta_em_baixo_continua(storage):
+    from kaidokubot.fontes import FonteError
+
+    r = await _avaliador(storage, kuantokusta=FakeKuantoKusta(erro=FonteError("x"))).avaliar(1, 1, False, lambda _: None)
+    assert "⚠️ KuantoKusta indisponível" in r.texto

@@ -44,7 +44,7 @@ TOKYO = ZoneInfo("Asia/Tokyo")
 
 
 # Sobe quando a forma de avaliar muda: as avaliações antigas deixam de servir de cache.
-CACHE_VERSAO = 2
+CACHE_VERSAO = 3
 
 
 def chave_cache(nome: str, estado: str) -> str:

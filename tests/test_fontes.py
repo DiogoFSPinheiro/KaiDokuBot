@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from kaidokubot.fontes import Anuncio, anuncio_mercari, anuncio_vinted
+from kaidokubot.fontes import Anuncio, anuncio_kuantokusta, anuncio_mercari, anuncio_vinted
 
 
 def test_anuncio_mercari_traduz_o_estado():
@@ -29,3 +29,14 @@ def test_anuncio_vinted_sem_total_nem_estado():
 
 def test_anuncio_vinted_preco_invalido_e_ignorado():
     assert anuncio_vinted({"title": "x", "price": {"amount": ""}}) is None
+
+
+def test_anuncio_kuantokusta():
+    raw = {"name": "Good Smile Company Estatua Emilia Re:ZERO 17cm", "priceMin": 44.6, "totalOffers": 1,
+           "category": "Figuras de Coleção"}  # fmt: skip
+    assert anuncio_kuantokusta(raw) == Anuncio("Good Smile Company Estatua Emilia Re:ZERO 17cm", 44.6,
+                                               "novo · 1 loja · Figuras de Coleção")  # fmt: skip
+
+
+def test_anuncio_kuantokusta_sem_preco_e_ignorado():
+    assert anuncio_kuantokusta({"name": "x", "priceMin": None}) is None

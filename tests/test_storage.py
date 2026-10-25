@@ -131,7 +131,7 @@ def test_migra_tabela_antiga_sem_dados_de(tmp_path):
 
 
 def test_chave_cache_tem_versao():
-    assert chave_cache("x", "usado").startswith("v2|")
+    assert chave_cache("x", "usado").startswith("v3|")
 
 
 def test_cache_por_produto():

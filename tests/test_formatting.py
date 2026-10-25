@@ -57,7 +57,7 @@ def test_resultado_completo():
     m = _mercado(fontes=[{"nome": "JapanDco", "url": "https://j.example/x"}, {"nome": "Vinted <pt>", "url": "https://v"}])
     assert _resultado(m).splitlines() == [
         "📦 <b>nendoroid frieren</b> · ¥4.800 → €24.86 após reembolso",
-        "🔍 Nendoroid 2367 Frieren",
+        "🔍 Nendoroid Frieren 2367",
         "🟢 <b>Compensa</b> — poupas €29.14 (54%) face a Vinted (€54.00)",
         "💴 Pagaria no máximo ¥8.300",
         "🇪🇺 Novo €54.90 (JapanDco) · Vinted ~€50.00 + portes (€45.00–65.00, 12) · importar ~€62.51 (AmiAmi)",
@@ -122,7 +122,7 @@ def test_resumo_compacto():
         "💴 Máximo ¥8.300",
         "🇪🇺 Vinted ~€50 (12) · novo €55 (JapanDco) · importar ~€63",
         "🇯🇵 Mercari ¥3.900–4.500 (8) · 👀 caro aqui",
-        "🔍 Nendoroid 2367 Frieren",
+        "🔍 Nendoroid Frieren 2367",
     ]
 
 
