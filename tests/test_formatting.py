@@ -61,7 +61,7 @@ def test_resultado_completo():
         "🟢 <b>Compensa</b> — poupas €29.14 (54%) face a Vinted (€54.00)",
         "💴 Pagaria no máximo ¥8.300",
         "🇪🇺 Novo €54.90 (JapanDco) · Vinted ~€50.00 + portes (€45.00–65.00, 12) · importar ~€62.51 (AmiAmi)",
-        "🇯🇵 Mercari vendidos ¥3.900–4.500 (8)",
+        "🇯🇵 Mercari vendidos ¥3.900–4.500 ≈ €22–26 (8)",
         "👀 Acima do normal no Japão — vê noutras lojas",
         "Razão.",
         '🔗 <a href="https://j.example/x">JapanDco</a> · <a href="https://v">Vinted &lt;pt&gt;</a>',
@@ -74,7 +74,7 @@ def test_resultado_nao_compensa_e_so_pedidos():
     linhas = _resultado(m).splitlines()
     assert linhas[2] == "🔴 <b>Não compensa</b> — €4.86 mais caro que Vinted (€20.00)"
     assert "🇪🇺 Vinted ~€16.00 + portes (12)" in linhas
-    assert "🇯🇵 Mercari à venda ¥3.900–6.000 (só anúncios, sem vendas)" in linhas
+    assert "🇯🇵 Mercari à venda ¥3.900–6.000 ≈ €22–34 (só anúncios, sem vendas)" in linhas
     assert "⚠️ Vinted indisponível" in linhas
 
 
@@ -121,7 +121,7 @@ def test_resumo_compacto():
         "🟢 <b>Compensa</b> · poupas €29 (54%)",
         "💴 Máximo ¥8.300",
         "🇪🇺 Vinted ~€50 (12) · novo €55 (JapanDco) · importar ~€63",
-        "🇯🇵 Mercari ¥3.900–4.500 (8) · 👀 caro aqui",
+        "🇯🇵 Mercari ¥3.900–4.500 ≈ €22–26 (8) · 👀 caro aqui",
         "🔍 Nendoroid Frieren 2367",
     ]
 
@@ -146,8 +146,9 @@ def test_resumo_incerto_e_so_pedidos():
     m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None,
                  importar_yen=None, jp_so_pedidos=True, jp_max_yen=4900.0, produto="")  # fmt: skip
     assert _resumo(m).splitlines() == [
-        "⚪ <b>Incerto</b> · sem preços europeus fiáveis",
-        "🇯🇵 Mercari à venda ¥3.900–4.900 (8)",
+        "🟡 <b>Preço normal no Japão</b> · sem preços europeus",
+        "💴 Máximo ¥4.900",
+        "🇯🇵 Mercari à venda ¥3.900–4.900 ≈ €22–28 (8)",
     ]
 
 
@@ -169,7 +170,7 @@ def test_resumo_com_links_para_confirmar():
         '<a href="https://www.kuantokusta.pt/p/1">novo €55 (JapanDco)</a> · '
         '<a href="https://www.amiami.com/x">importar ~€63</a>'
     )
-    assert linhas[3] == '🇯🇵 <a href="https://jp.mercari.com/search?keyword=x">Mercari ¥3.900–4.500 (8)</a> · 👀 caro aqui'
+    assert linhas[3] == '🇯🇵 <a href="https://jp.mercari.com/search?keyword=x">Mercari ¥3.900–4.500 ≈ €22–26 (8)</a> · 👀 caro aqui'
     assert linhas[4] == '🔍 <a href="https://myfigurecollection.net/item/1">Nendoroid Frieren 2367</a>'
 
 
@@ -177,3 +178,14 @@ def test_link_invalido_fica_so_texto():
     m = _mercado(novo_eu_url="javascript:alert(1)", importar_yen=None, vinted_tipico_eur=None, vinted_min_eur=None,
                  vinted_max_eur=None)  # fmt: skip
     assert _resumo(m).splitlines()[2] == "🇪🇺 novo €55 (JapanDco)"
+
+
+
+def test_resumo_caro_para_o_japao():
+    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None,
+                 importar_yen=None, produto="")  # fmt: skip
+    assert _resumo(m).splitlines()[:3] == [
+        "🔴 <b>Caro para o Japão</b> · sem preços europeus",
+        "💴 Máximo ¥4.500",
+        "🇯🇵 Mercari ¥3.900–4.500 ≈ €22–26 (8)",
+    ]

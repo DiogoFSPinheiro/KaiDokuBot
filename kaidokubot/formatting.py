@@ -67,7 +67,9 @@ def resposta_imediata(p: Pedido, c: Contas) -> str:
 MAX_RAZAO = 600
 MAX_FONTES = 8
 _CABECALHO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença</b>",
-              "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>"}  # fmt: skip
+              "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>",
+              "jp_bom": "🟢 <b>Bom preço para o Japão</b>", "jp_normal": "🟡 <b>Preço normal no Japão</b>",
+              "jp_caro": "🔴 <b>Caro para o Japão</b>"}  # fmt: skip
 
 
 def _ha_quanto(segundos: float) -> str:
@@ -81,6 +83,8 @@ def _ha_quanto(segundos: float) -> str:
 
 def _linha_veredicto(v: Veredicto) -> str:
     cabecalho = _CABECALHO[v.codigo]
+    if v.codigo.startswith("jp_"):
+        return f"{cabecalho} — sem preços europeus; comparado com os vendidos no Mercari"
     if v.codigo == "incerto" or v.melhor is None or v.poupanca_eur is None:
         return f"{cabecalho} — {escape(v.motivo or '')}"
     rotulo = f"{escape(v.melhor[0])} ({fmt_eur(v.melhor[1])})"
@@ -104,13 +108,23 @@ def _linha_europa(m: Mercado, taxa: float | None) -> str | None:
     return "🇪🇺 " + " · ".join(partes) if partes else None
 
 
-def _linha_japao(m: Mercado) -> str | None:
+def _mercari_em_eur(m: Mercado, taxa: float | None) -> str:
+    """« ≈ €22–26» ao lado do intervalo em ienes (vazio sem câmbio)."""
+    if taxa is None or not (m.jp_min_yen or m.jp_max_yen):
+        return ""
+    lo = m.jp_min_yen * taxa if m.jp_min_yen else None
+    hi = m.jp_max_yen * taxa if m.jp_max_yen else None
+    return f" ≈ {_intervalo(lo, hi, _eur0)}"
+
+
+def _linha_japao(m: Mercado, taxa: float | None) -> str | None:
     jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
     if not jp:
         return None
+    eur = _mercari_em_eur(m, taxa)
     if m.jp_so_pedidos:
-        return f"🇯🇵 Mercari à venda {jp} (só anúncios, sem vendas)"
-    return f"🇯🇵 Mercari vendidos {jp} ({m.jp_n})"
+        return f"🇯🇵 Mercari à venda {jp}{eur} (só anúncios, sem vendas)"
+    return f"🇯🇵 Mercari vendidos {jp}{eur} ({m.jp_n})"
 
 
 def _linha_cenario(cenario: dict) -> str:
@@ -134,7 +148,7 @@ def resultado(p: Pedido, c: Contas, m: Mercado, v: Veredicto, criado_em: float |
     lines.append(_linha_veredicto(v))
     if v.max_montra_yen and v.max_montra_yen > 0:
         lines.append(f"💴 Pagaria no máximo {fmt_yen(v.max_montra_yen)}")
-    lines += [linha for linha in (_linha_europa(m, taxa), _linha_japao(m)) if linha]
+    lines += [linha for linha in (_linha_europa(m, taxa), _linha_japao(m, taxa)) if linha]
     lines += [_linha_cenario(cenario) for cenario in m.cenarios]
     if v.caro_no_japao:
         lines.append("👀 Acima do normal no Japão — vê noutras lojas")
@@ -165,8 +179,7 @@ def _eur0(valor: float) -> str:
     return f"€{round(valor)}"
 
 
-_CURTO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença</b>",
-          "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>"}  # fmt: skip
+_CURTO = _CABECALHO
 
 
 def resumo(
@@ -175,7 +188,7 @@ def resumo(
     """Resultado compacto para ler de pé na loja (o artigo já aparece citado por cima)."""
     taxa = c.montra_eur / c.montra_yen if c.montra_eur is not None else None
     cabecalho = _CURTO[v.codigo]
-    if v.codigo == "incerto" or v.poupanca_eur is None:
+    if v.codigo.startswith("jp_") or v.codigo == "incerto" or v.poupanca_eur is None:
         lines = [f"{cabecalho} · {escape(v.motivo or '')}"]
     elif v.codigo == "nao":
         lines = [f"{cabecalho} · {_eur0(-v.poupanca_eur)} mais caro que na Europa"]
@@ -195,7 +208,8 @@ def resumo(
         lines.append("🇪🇺 " + " · ".join(europa))
     jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
     if jp:
-        linha = _link(f"Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp} ({m.jp_n})", m.mercari_url)
+        texto = f"Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp}{_mercari_em_eur(m, taxa)} ({m.jp_n})"
+        linha = _link(texto, m.mercari_url)
         lines.append(f"🇯🇵 {linha}" + (" · 👀 caro aqui" if v.caro_no_japao else ""))
     if m.produto:
         lines.append(f"🔍 {_link(escape(m.produto), m.produto_url)}")

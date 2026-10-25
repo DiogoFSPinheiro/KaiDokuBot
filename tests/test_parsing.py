@@ -58,7 +58,7 @@ def test_sem_nome_da_erro():
         parse_pedido("4800 selado")
 
 
-@pytest.mark.parametrize("texto", ["figura 0", "figura 50", "figura 99999999"])
+@pytest.mark.parametrize("texto", ["figura 0", "figura 50", "figura 99999999", "figura ¥50"])
 def test_preco_fora_de_limites(texto):
     with pytest.raises(ParseError, match="preço"):
         parse_pedido(texto)
@@ -81,3 +81,9 @@ def test_parse_preco_isolado():
 def test_medidas_e_escalas_nao_sao_preco(texto):
     with pytest.raises(ParseError, match="Falta o preço"):
         parse_pedido(texto)
+
+
+
+def test_numero_pequeno_e_falta_de_preco():
+    with pytest.raises(ParseError, match="Falta o preço"):
+        parse_pedido("Xenoblade Chronicles: Definitive Edition switch 2")

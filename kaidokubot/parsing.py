@@ -114,6 +114,9 @@ def parse_pedido(texto: str) -> Pedido:
     if preco is None:
         raise ParseError("Falta o preço. Exemplo: nendoroid frieren 4800")
     valor = _valor(preco)
+    if valor < PRECO_MIN and not (preco["pre"] or preco["pos"]):
+        # Ex.: «switch 2» sem preço: o «2» não é um preço.
+        raise ParseError("Falta o preço. Exemplo: nendoroid frieren 4800")
     if not PRECO_MIN <= valor <= PRECO_MAX:
         raise ParseError(f"O preço tem de estar entre ¥{PRECO_MIN} e ¥{PRECO_MAX:,}.".replace(",", "."))
     estados = list(_RE_ESTADO.finditer(texto))

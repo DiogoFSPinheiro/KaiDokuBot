@@ -24,6 +24,7 @@ PORTES_VINTED_EUR = 4.0
 
 MIN_COMPARAVEIS_JP = 3
 MIN_COMPARAVEIS_VINTED = 2
+MIN_VENDIDOS_VEREDICTO_JP = 2  # sem preços europeus, o veredicto vem do Mercari
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ class Mercado:
 
 @dataclass(frozen=True)
 class Veredicto:
-    codigo: str  # compensa | pouca | nao | incerto
+    codigo: str  # compensa | pouca | nao | incerto; sem Europa: jp_bom | jp_normal | jp_caro
     melhor: tuple[str, float] | None  # alternativa europeia mais barata (rótulo, €)
     poupanca_eur: float | None
     poupanca_pct: float | None
@@ -144,11 +145,22 @@ def alternativas(m: Mercado, taxa: float) -> list[tuple[str, float]]:
 def calcular_veredicto(m: Mercado, c: Contas, taxa: float | None, margem_pct: int) -> Veredicto:
     # Com poucos vendidos comparáveis o intervalo do Mercari não é fiável.
     caro = m.jp_max_yen is not None and m.jp_n >= MIN_COMPARAVEIS_JP and c.montra_yen > m.jp_max_yen
-    if taxa is None or c.liquido_eur is None:
-        return Veredicto("incerto", None, None, None, None, caro, "câmbio indisponível")
-    opcoes = alternativas(m, taxa)
+    sem_cambio = taxa is None or c.liquido_eur is None
+    opcoes = [] if sem_cambio else alternativas(m, taxa)
     if not opcoes:
-        return Veredicto("incerto", None, None, None, None, caro, "sem preços europeus fiáveis")
+        # Sem alternativa europeia: pelo menos diz se o preço é normal para o Japão.
+        if m.jp_max_yen and m.jp_n >= MIN_VENDIDOS_VEREDICTO_JP:
+            minimo = m.jp_min_yen or m.jp_max_yen
+            if c.montra_yen < minimo:
+                codigo = "jp_bom"
+            elif c.montra_yen > m.jp_max_yen:
+                codigo = "jp_caro"
+            else:
+                codigo = "jp_normal"
+            maximo = math.floor(m.jp_max_yen / 100) * 100
+            return Veredicto(codigo, None, None, None, maximo, False, "sem preços europeus")
+        motivo = "câmbio indisponível" if sem_cambio else "sem preços europeus fiáveis"
+        return Veredicto("incerto", None, None, None, None, caro, motivo)
     melhor = min(opcoes, key=lambda opcao: opcao[1])
     poupanca = melhor[1] - c.liquido_eur
     pct = poupanca / melhor[1] * 100

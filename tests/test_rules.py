@@ -76,14 +76,15 @@ def test_melhor_e_a_alternativa_mais_barata():
 
 
 def test_incerto_sem_alternativas():
-    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None, importar_yen=None)
+    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None, importar_yen=None,
+                 jp_min_yen=None, jp_max_yen=None, jp_n=0)  # fmt: skip
     v = calcular_veredicto(m, contas(4800, TAXA), TAXA, 20)
     assert (v.codigo, v.melhor, v.max_montra_yen) == ("incerto", None, None)
     assert "europeus" in v.motivo
 
 
 def test_incerto_sem_cambio():
-    v = calcular_veredicto(_mercado(), contas(4800, None), None, 20)
+    v = calcular_veredicto(_mercado(jp_max_yen=None, jp_min_yen=None, jp_n=0), contas(4800, None), None, 20)
     assert v.codigo == "incerto"
     assert "câmbio" in v.motivo
 
@@ -110,6 +111,33 @@ def test_caro_no_japao_exige_pelo_menos_3_comparaveis():
 
 
 def test_vinted_com_um_so_anuncio_nao_entra_no_veredicto():
-    m = _mercado(vinted_n=1, novo_eu_eur=None, importar_yen=None)
+    m = _mercado(vinted_n=1, novo_eu_eur=None, importar_yen=None, jp_n=1)
     v = calcular_veredicto(m, contas(4800, TAXA), TAXA, 20)
     assert (v.codigo, v.motivo) == ("incerto", "sem preços europeus fiáveis")
+
+
+
+def _sem_europa(**overrides):
+    campos = dict(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None, importar_yen=None)
+    campos.update(overrides)
+    return _mercado(**campos)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("preco, codigo", [(3500, "jp_bom"), (4200, "jp_normal"), (4800, "jp_caro")])
+def test_sem_europa_compara_com_o_mercari(preco, codigo):
+    v = calcular_veredicto(_sem_europa(), contas(preco, TAXA), TAXA, 20)
+    assert v.codigo == codigo
+    assert v.max_montra_yen == 4500  # o topo dos vendidos no Mercari
+    assert v.caro_no_japao is False  # o próprio veredicto já o diz
+
+
+def test_sem_europa_e_um_so_vendido_continua_incerto():
+    v = calcular_veredicto(_sem_europa(jp_n=1), contas(4800, TAXA), TAXA, 20)
+    assert v.codigo == "incerto"
+
+
+def test_sem_europa_sem_cambio_compara_com_o_mercari_na_mesma():
+    assert calcular_veredicto(_sem_europa(), contas(4800, None), None, 20).codigo == "jp_caro"
