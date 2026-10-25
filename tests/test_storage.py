@@ -41,3 +41,63 @@ def test_persistencia_em_ficheiro(tmp_path):
     assert storage.get_pedido(pedido_id) == PEDIDO
     assert storage.get_kv("fx_taxa") == "0.0057"
     storage.close()
+
+
+# --- avaliações, cache e limite (fase 2) ------------------------------------------------
+from datetime import datetime, timezone  # noqa: E402
+
+import pytest  # noqa: E402
+
+from kaidokubot.storage import chave_cache, inicio_do_dia_tokyo  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [(("Nendoroid  Frieren", "selado"), ("nendoroid frieren", "selado")),
+     (("Pokémon Scarlet", "usado"), ("pokemon scarlet ", "usado")),
+     (("ＰＯＰ ＵＰ", "novo"), ("pop up", "novo"))],
+)  # fmt: skip
+def test_chave_cache_normaliza(a, b):
+    assert chave_cache(*a) == chave_cache(*b)
+
+
+def test_chave_cache_depende_do_estado():
+    assert chave_cache("nendoroid frieren", "selado") != chave_cache("nendoroid frieren", "usado")
+
+
+def _avaliar(storage, chave, now, da_cache=False, mercado='{"x": 1}'):
+    return storage.add_avaliacao(1, 1, PEDIDO, chave, mercado, "compensa", da_cache, now=now)
+
+
+def test_cache_devolve_o_mais_recente_dentro_do_prazo():
+    storage = Storage()
+    _avaliar(storage, "k", 100.0, mercado='{"v": 1}')
+    _avaliar(storage, "k", 200.0, mercado='{"v": 2}')
+    _avaliar(storage, "k", 300.0, da_cache=True, mercado='{"v": 3}')
+    assert storage.cache("k", desde=50.0) == ('{"v": 2}', 200.0)
+    assert storage.cache("k", desde=250.0) is None
+    assert storage.cache("outra", desde=0.0) is None
+
+
+def test_contar_avaliacoes_ignora_cache_e_antigas():
+    storage = Storage()
+    _avaliar(storage, "k", 100.0)
+    _avaliar(storage, "k", 200.0)
+    _avaliar(storage, "k", 210.0, da_cache=True)
+    assert storage.contar_avaliacoes(desde=150.0) == 1
+
+
+def test_ultimas_avaliacoes():
+    storage = Storage()
+    for i in range(12):
+        _avaliar(storage, "k", float(i))
+    ultimas = storage.ultimas_avaliacoes(10)
+    assert len(ultimas) == 10
+    assert ultimas[0]["criado_em"] == 11.0
+    assert (ultimas[0]["nome"], ultimas[0]["preco_yen"], ultimas[0]["veredicto"]) == ("nendoroid frieren", 4800, "compensa")
+
+
+def test_inicio_do_dia_tokyo():
+    # 25/10 15:30 UTC = 26/10 00:30 em Tóquio -> o dia começou às 26/10 00:00 JST = 25/10 15:00 UTC.
+    agora = datetime(2026, 10, 25, 15, 30, tzinfo=timezone.utc).timestamp()
+    assert inicio_do_dia_tokyo(agora) == datetime(2026, 10, 25, 15, 0, tzinfo=timezone.utc).timestamp()
