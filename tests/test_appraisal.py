@@ -246,3 +246,14 @@ async def test_link_com_codigo_inexistente_e_ignorado(storage):
     mercado = {**MERCADO, "novo_eu_link": "K99"}
     r = await _avaliador(storage, FakeRunner({"termos": TERMOS, "mercado": mercado})).avaliar(1, 1, False, lambda _: None)
     assert "novo €55 (JapanDco)" in r.texto and 'kuantokusta.pt/p/' not in r.texto
+
+
+
+async def test_pedido_de_foto_salta_a_identificacao(storage):
+    storage.set_termos(1, TERMOS)
+    progresso = []
+    runner = FakeRunner({"termos": TERMOS, "mercado": MERCADO})
+    r = await _avaliador(storage, runner).avaliar(1, 1, False, progresso.append)
+    assert [tipo for tipo, _, _ in runner.chamadas] == ["mercado"]
+    assert "🔍 Nendoroid Frieren 2367" in r.texto
+    assert "📷 Produto identificado pela foto" in progresso

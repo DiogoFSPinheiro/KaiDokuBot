@@ -11,11 +11,13 @@ from telegram.error import BadRequest, RetryAfter
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from kaidokubot.appraisal import Avaliador
+from kaidokubot.claude import ClaudeCli, ClaudeError
 from kaidokubot.commands import Commands, Resposta
 from kaidokubot.config import Settings
 from kaidokubot.formatting import HELP
 from kaidokubot.fx import Cambio
 from kaidokubot.storage import Storage
+from kaidokubot.vision import ler_foto
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +76,8 @@ class Progresso:
 
 
 def build_application(
-    settings: Settings, storage: Storage, cambio: Cambio, recursos: list, avaliador: Avaliador | None = None
+    settings: Settings, storage: Storage, cambio: Cambio, recursos: list, avaliador: Avaliador | None = None,
+    claude: ClaudeCli | None = None,
 ) -> Application:
     async def on_shutdown(_app: Application) -> None:
         for recurso in recursos:  # clientes HTTP (câmbio, Mercari, Vinted)
@@ -189,6 +192,36 @@ def build_application(
     app.add_handler(CommandHandler(["start", "help"], on_start, filters=allowed))
     app.add_handler(CommandHandler("cambio", on_cambio, filters=allowed))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & allowed, on_text))
+
+    if claude is not None:
+
+        async def on_foto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            mensagem = update.effective_message
+            chat_id = update.effective_chat.id
+            await fechar_pedido_de_texto(context.bot, chat_id)
+            if mensagem.photo:
+                ficheiro, media_type = mensagem.photo[-1], "image/jpeg"  # a maior resolução
+            else:
+                ficheiro, media_type = mensagem.document, mensagem.document.mime_type or "image/jpeg"
+            pendente = await mensagem.reply_text("📷 A ler a foto…", do_quote=True)
+            try:
+                imagem = bytes(await (await ficheiro.get_file()).download_as_bytearray())
+                leitura = await ler_foto(claude, imagem, media_type, mensagem.caption)
+            except ClaudeError as exc:
+                await pendente.edit_text(f"❌ Não consegui ler a foto: {exc}")
+                return
+            except Exception:
+                log.exception("Falha ao ler a foto")
+                await pendente.edit_text("❌ Não consegui ler a foto (erro inesperado, vê o log).")
+                return
+            r = commands.foto(chat_id, leitura)
+            await pendente.edit_text(
+                r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
+            )
+
+        # block=False: ler a foto demora uns segundos e não pode bloquear as outras mensagens.
+        imagens = (filters.PHOTO | filters.Document.IMAGE) & allowed
+        app.add_handler(MessageHandler(imagens, on_foto, block=False))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(fix:\d+|fixf:\d+:(nome|preco|estado)|st:\d+:\d|fixx:\d+)$"))
 
     if avaliador is not None:

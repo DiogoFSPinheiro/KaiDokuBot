@@ -139,3 +139,13 @@ def test_cache_por_produto():
     storage.add_avaliacao(1, 1, PEDIDO, "k1", '{"v": 1}', "compensa", False, chave_produto="p", now=100.0)
     assert storage.cache_produto("p", desde=50.0) == ('{"v": 1}', 100.0)
     assert storage.cache_produto("outro", desde=0.0) is None
+
+
+
+def test_termos_do_pedido():
+    storage = Storage()
+    pedido_id = storage.add_pedido(1, PEDIDO, termos={"linha": "Nendoroid"})
+    assert storage.get_termos(pedido_id) == {"linha": "Nendoroid"}
+    storage.set_termos(pedido_id, None)
+    assert storage.get_termos(pedido_id) is None
+    assert storage.get_termos(storage.add_pedido(1, PEDIDO)) is None

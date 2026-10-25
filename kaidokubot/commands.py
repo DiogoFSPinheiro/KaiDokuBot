@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from html import escape
 
 from kaidokubot.formatting import resposta_imediata, texto_cambio
 from kaidokubot.fx import Cambio, parse_taxa
 from kaidokubot.parsing import ESTADOS, PRECO_MAX, PRECO_MIN, ParseError, Pedido, e_so_preco, parse_pedido, parse_preco
 from kaidokubot.rules import contas
 from kaidokubot.storage import Storage
+from kaidokubot.vision import Leitura
 
 NAO_EXISTE = "Já não tenho esse pedido. Envia-o outra vez."
 
@@ -64,6 +66,8 @@ class Commands:
             if not nome:
                 return None
             pedido = replace(pedido, nome=nome)
+            # Outro nome é outro produto: a identificação lida da foto deixa de servir.
+            self._storage.set_termos(pedido_id, None)
         else:
             if not e_so_preco(texto):
                 return None
@@ -74,6 +78,23 @@ class Commands:
             pedido = replace(pedido, preco_yen=preco)
         self._storage.update_pedido(pedido_id, pedido)
         return self._imediata(pedido_id, pedido)
+
+    def foto(self, chat_id: int, leitura: Leitura) -> Resposta:
+        """Pedido lido de uma foto: mostra o que percebeu e espera pela confirmação (não avalia sozinho)."""
+        pedido = Pedido(leitura.nome, leitura.preco_yen or 0, leitura.estado)
+        pedido_id = self._storage.add_pedido(chat_id, pedido, termos=leitura.termos)
+        if leitura.preco_yen is None:
+            # A resposta seguinte (só o preço) completa o pedido e avalia.
+            self._esperando[chat_id] = (pedido_id, "preco")
+            return Resposta(
+                f"📷 Percebi: <b>{escape(pedido.nome)}</b> · {escape(pedido.estado)}\n"
+                "❓ Não consegui ler o preço. Escreve-o (ex.: 4800):",
+                [[_cancelar(pedido_id)]],
+            )
+        texto = "📷 Percebi:\n" + resposta_imediata(pedido, contas(pedido.preco_yen, self._cambio.taxa()))
+        if leitura.confianca == "baixa":
+            texto += "\n⚠️ Não tenho a certeza: confirma ou corrige."
+        return Resposta(texto, [[("💡 Avaliar", f"av:{pedido_id}"), ("✏️ Corrigir", f"fix:{pedido_id}")]])
 
     def menu_corrigir(self, pedido_id: int) -> Resposta:
         if self._storage.get_pedido(pedido_id) is None:

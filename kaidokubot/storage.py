@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 import unicodedata
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
     nome TEXT NOT NULL,
     preco_yen INTEGER NOT NULL,
     estado TEXT NOT NULL,
-    criado_em REAL NOT NULL
+    criado_em REAL NOT NULL,
+    termos_json TEXT  -- identificação do produto lida da foto (a avaliação salta esse passo)
 );
 CREATE TABLE IF NOT EXISTS avaliacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +80,9 @@ class Storage:
         self._migrar()
 
     def _migrar(self) -> None:
+        if "termos_json" not in {row["name"] for row in self._db.execute("PRAGMA table_info(pedidos)")}:
+            with self._db:
+                self._db.execute("ALTER TABLE pedidos ADD COLUMN termos_json TEXT")
         colunas = {row["name"] for row in self._db.execute("PRAGMA table_info(avaliacoes)")}
         for coluna, tipo in (("dados_de", "REAL"), ("chave_produto", "TEXT")):
             if coluna not in colunas:
@@ -87,13 +92,25 @@ class Storage:
     def close(self) -> None:
         self._db.close()
 
-    def add_pedido(self, chat_id: int, pedido: Pedido, now: float | None = None) -> int:
+    def add_pedido(self, chat_id: int, pedido: Pedido, now: float | None = None, termos: dict | None = None) -> int:
         with self._db:
             cur = self._db.execute(
-                "INSERT INTO pedidos (chat_id, nome, preco_yen, estado, criado_em) VALUES (?, ?, ?, ?, ?)",
-                (chat_id, pedido.nome, pedido.preco_yen, pedido.estado, time.time() if now is None else now),
-            )
+                "INSERT INTO pedidos (chat_id, nome, preco_yen, estado, criado_em, termos_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (chat_id, pedido.nome, pedido.preco_yen, pedido.estado, time.time() if now is None else now,
+                 None if termos is None else json.dumps(termos, ensure_ascii=False)),
+            )  # fmt: skip
         return cur.lastrowid
+
+    def get_termos(self, pedido_id: int) -> dict | None:
+        row = self._db.execute("SELECT termos_json FROM pedidos WHERE id = ?", (pedido_id,)).fetchone()
+        return json.loads(row["termos_json"]) if row and row["termos_json"] else None
+
+    def set_termos(self, pedido_id: int, termos: dict | None) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE pedidos SET termos_json = ? WHERE id = ?",
+                (None if termos is None else json.dumps(termos, ensure_ascii=False), pedido_id),
+            )
 
     def get_pedido(self, pedido_id: int) -> Pedido | None:
         row = self._db.execute("SELECT nome, preco_yen, estado FROM pedidos WHERE id = ?", (pedido_id,)).fetchone()

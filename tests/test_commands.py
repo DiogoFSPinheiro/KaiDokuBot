@@ -141,3 +141,45 @@ def test_pedido_id_so_nas_respostas_de_um_pedido(commands):
     assert commands.definir_estado(1, 0).pedido_id == 1
     commands.pedir_campo(CHAT, 1, "preco")
     assert commands.texto(CHAT, "5000").pedido_id == 1
+
+
+
+def _leitura(preco=4800, confianca="alta", estado="caixa danificada"):
+    from kaidokubot.vision import Leitura
+
+    return Leitura("Nendoroid Frieren", preco, estado, confianca, {"linha": "Nendoroid", "personagem": "Frieren"})
+
+
+def test_foto_mostra_o_que_percebeu_e_nao_avalia_sozinha(storage):
+    commands = Commands(storage, Cambio(storage, FakeHttp(), now=FakeClock()), avaliacao=False)
+    r = commands.foto(CHAT, _leitura())
+    assert r.texto.splitlines()[0] == "📷 Percebi:"
+    assert "📦 <b>Nendoroid Frieren</b>" in r.texto and "Estado: caixa danificada" in r.texto
+    assert r.botoes == [[("💡 Avaliar", "av:1"), ("✏️ Corrigir", "fix:1")]]
+    assert r.pedido_id is None
+    assert storage.get_termos(1) == {"linha": "Nendoroid", "personagem": "Frieren"}
+
+
+def test_foto_com_pouca_confianca_avisa(commands):
+    assert "⚠️ Não tenho a certeza" in commands.foto(CHAT, _leitura(confianca="baixa")).texto
+
+
+def test_foto_sem_preco_pergunta_e_a_resposta_completa_o_pedido(commands, storage):
+    r = commands.foto(CHAT, _leitura(preco=None))
+    assert "Não consegui ler o preço" in r.texto
+    r = commands.texto(CHAT, "4800")
+    assert storage.get_pedido(1).preco_yen == 4800
+    assert r.pedido_id == 1  # depois de completar, avalia sozinho
+
+
+def test_corrigir_o_nome_apaga_a_identificacao(commands, storage):
+    commands.foto(CHAT, _leitura())
+    commands.pedir_campo(CHAT, 1, "nome")
+    commands.texto(CHAT, "Nendoroid Fern")
+    assert storage.get_termos(1) is None
+
+
+def test_corrigir_o_estado_mantem_a_identificacao(commands, storage):
+    commands.foto(CHAT, _leitura())
+    commands.definir_estado(1, 0)
+    assert storage.get_termos(1) is not None

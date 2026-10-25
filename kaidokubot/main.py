@@ -30,17 +30,18 @@ def main() -> None:
     cambio = Cambio(storage, http)
     recursos: list = [http]
     avaliador = None
-    if settings.claude_bin and settings.max_avaliacoes_dia > 0:
+    claude = ClaudeCli(settings.claude_bin, settings.claude_model) if settings.claude_bin else None
+    if claude is not None and settings.max_avaliacoes_dia > 0:
         mercari, vinted, kuantokusta = Mercari(), Vinted(), KuantoKusta()
         recursos += [mercari, vinted, kuantokusta]
         avaliador = Avaliador(
-            storage, cambio, ClaudeCli(settings.claude_bin, settings.claude_model), mercari, vinted, kuantokusta,
+            storage, cambio, claude, mercari, vinted, kuantokusta,
             max_dia=settings.max_avaliacoes_dia, margem=settings.margem_minima, cache_dias=settings.cache_dias,
         )  # fmt: skip
         logging.info("Avaliação por IA ativa (%s, modelo %s)", settings.claude_bin, settings.claude_model)
     else:
         logging.warning("Avaliação por IA desligada (sem claude no PATH ou MAX_AVALIACOES_DIA=0)")
-    app = build_application(settings, storage, cambio, recursos, avaliador)
+    app = build_application(settings, storage, cambio, recursos, avaliador, claude)
     app.run_polling()
 
 

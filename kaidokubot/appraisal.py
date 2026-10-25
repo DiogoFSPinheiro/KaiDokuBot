@@ -273,7 +273,11 @@ class Avaliador:
                 # Enquanto esperava, outro pedido pode ter avaliado o mesmo artigo.
                 if not forcar and (cache := self._da_cache(self._storage.cache, chave)):
                     return self._registar(chat_id, pedido_id, pedido, chave, *cache, da_cache=True)
-                termos = await self._identificar(pedido, progresso)
+                termos = self._storage.get_termos(pedido_id)
+                if termos and termos.get("termo_jp") and termos.get("termo_en"):
+                    progresso("📷 Produto identificado pela foto")
+                else:
+                    termos = await self._identificar(pedido, progresso)
                 chave_produto = None
                 if termos.get("linha") or termos.get("personagem"):
                     chave_produto = chave_cache(f"produto:{identidade_de(termos)}", pedido.estado)

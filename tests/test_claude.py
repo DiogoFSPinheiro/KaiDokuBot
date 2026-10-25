@@ -50,3 +50,27 @@ def test_sem_resultado():
 def test_resultado_sem_structured_output():
     with pytest.raises(ClaudeError):
         ler_stream([_linha(type="result", subtype="success", is_error=False, result="texto")], None)
+
+
+
+def test_mensagem_com_imagem():
+    import base64
+
+    from kaidokubot.claude import mensagem_com_imagem
+
+    linha = mensagem_com_imagem("Lê a etiqueta.", b"\xff\xd8jpeg", "image/jpeg")
+    assert linha.endswith("\n")
+    msg = json.loads(linha)
+    assert msg["type"] == "user"
+    imagem, texto = msg["message"]["content"]
+    assert imagem == {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                   "data": base64.b64encode(b"\xff\xd8jpeg").decode()}}
+    assert texto == {"type": "text", "text": "Lê a etiqueta."}
+
+
+def test_comando_com_imagem_usa_stream_json_na_entrada():
+    from kaidokubot.claude import ClaudeCli
+
+    cmd = ClaudeCli("claude", "sonnet")._cmd({"type": "object"}, "sys", "", com_imagem=True)
+    assert cmd[cmd.index("--input-format") + 1] == "stream-json"
+    assert "--input-format" not in ClaudeCli("claude", "sonnet")._cmd({"type": "object"}, "sys", "")
