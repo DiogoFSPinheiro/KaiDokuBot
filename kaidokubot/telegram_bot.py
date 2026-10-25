@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import html
+import re
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -176,9 +178,14 @@ def build_application(
             progresso = Progresso(pendente)
             r = await avaliador.avaliar(update.effective_chat.id, int(pedido_id), kind == "rv", progresso)
             await progresso.fechar()
-            await pendente.edit_text(
-                r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
-            )
+            try:
+                await pendente.edit_text(
+                    r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
+                )
+            except BadRequest:
+                # Nunca deixar a mensagem de progresso presa: manda o resultado numa mensagem nova, sem HTML.
+                log.exception("Não consegui mostrar o resultado da avaliação %s", pedido_id)
+                await pendente.reply_text(re.sub(r"<[^>]+>", "", html.unescape(r.texto)), reply_markup=markup(r))
 
         # block=False: a avaliação demora minutos e não pode bloquear as respostas imediatas.
         app.add_handler(CallbackQueryHandler(on_avaliar, pattern=r"^(av|rv):\d+$", block=False))
