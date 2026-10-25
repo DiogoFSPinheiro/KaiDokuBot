@@ -165,6 +165,8 @@ class KuantoKusta:
     async def procurar(self, termo: str) -> list[Anuncio]:
         try:
             response = await self._session.get(KUANTOKUSTA_URL, params={"q": termo})
+            if response.status_code == 404:  # é assim que responde quando não há resultados
+                return []
             if response.status_code != 200:
                 raise FonteError(f"KuantoKusta: HTTP {response.status_code}")
             # A página é Next.js: os resultados vêm em JSON no __NEXT_DATA__.

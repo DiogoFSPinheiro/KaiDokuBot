@@ -45,3 +45,31 @@ def test_anuncio_kuantokusta():
 
 def test_anuncio_kuantokusta_sem_preco_e_ignorado():
     assert anuncio_kuantokusta({"name": "x", "priceMin": None}) is None
+
+
+class _Resposta:
+    def __init__(self, status_code, text=""):
+        self.status_code, self.text = status_code, text
+
+
+class _Sessao:
+    def __init__(self, resposta):
+        self.resposta = resposta
+
+    async def get(self, url, params=None):
+        return self.resposta
+
+
+async def test_kuantokusta_sem_resultados_responde_404_e_e_lista_vazia():
+    from kaidokubot.fontes import KuantoKusta
+
+    assert await KuantoKusta(_Sessao(_Resposta(404))).procurar("nada") == []
+
+
+async def test_kuantokusta_erro_do_servidor_e_fonte_error():
+    import pytest
+
+    from kaidokubot.fontes import FonteError, KuantoKusta
+
+    with pytest.raises(FonteError):
+        await KuantoKusta(_Sessao(_Resposta(503))).procurar("x")
