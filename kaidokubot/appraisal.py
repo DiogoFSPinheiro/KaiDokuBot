@@ -12,7 +12,7 @@ from urllib.parse import quote_plus
 from kaidokubot.claude import ClaudeError
 from kaidokubot.commands import NAO_EXISTE, Resposta
 from kaidokubot.fontes import Anuncio, FonteError
-from kaidokubot.formatting import fmt_eur, fmt_yen, resultado
+from kaidokubot.formatting import fmt_eur, fmt_yen, resultado, resumo
 from kaidokubot.fx import Cambio
 from kaidokubot.parsing import Pedido
 from kaidokubot.rules import Mercado, calcular_veredicto, contas
@@ -240,18 +240,38 @@ class Avaliador:
             return None
 
     def _registar(
-        self, chat_id: int, pedido_id: int, pedido: Pedido, chave: str, mercado: Mercado, criado_em: float | None,
+        self, chat_id: int, pedido_id: int, pedido: Pedido, chave: str, mercado: Mercado, dados_de: float | None,
         *, da_cache: bool,
     ) -> Resposta:  # fmt: skip
+        """Guarda a avaliação no histórico e devolve o resumo. dados_de: quando os dados foram recolhidos (cache)."""
+        taxa = self._cambio.taxa()
+        veredicto = calcular_veredicto(mercado, contas(pedido.preco_yen, taxa), taxa, self._margem)
+        mercado_json = json.dumps(mercado.to_dict(), ensure_ascii=False)
+        avaliacao_id = self._storage.add_avaliacao(
+            chat_id, pedido_id, pedido, chave, mercado_json, veredicto.codigo, da_cache,
+            dados_de=dados_de, now=self._now(),
+        )  # fmt: skip
+        return self.mostrar(avaliacao_id, detalhes=False)
+
+    def mostrar(self, avaliacao_id: int, *, detalhes: bool) -> Resposta:
+        """Resumo compacto ou versão completa de uma avaliação (botões «📋 Detalhes» / «📌 Resumo»)."""
+        avaliacao = self._storage.get_avaliacao(avaliacao_id)
+        if avaliacao is None:
+            return Resposta(NAO_EXISTE)
+        mercado = Mercado.from_dict(json.loads(avaliacao.mercado_json))
+        pedido, pedido_id = avaliacao.pedido, avaliacao.pedido_id
         taxa = self._cambio.taxa()
         c = contas(pedido.preco_yen, taxa)
         veredicto = calcular_veredicto(mercado, c, taxa, self._margem)
-        mercado_json = json.dumps(mercado.to_dict(), ensure_ascii=False)
-        self._storage.add_avaliacao(
-            chat_id, pedido_id, pedido, chave, mercado_json, veredicto.codigo, da_cache, now=self._now()
-        )
-        texto = resultado(pedido, c, mercado, veredicto, criado_em, self._now())
-        return Resposta(texto, [[("🔄 Reavaliar", f"rv:{pedido_id}"), ("✏️ Corrigir", f"fix:{pedido_id}")]])
+        agora = self._now()
+        # "🕒 avaliado há…" só quando os dados não são de agora (cache ou mostrado mais tarde).
+        recolhido = avaliacao.dados_de if avaliacao.da_cache or agora - avaliacao.dados_de >= 300 else None
+        acoes = [("🔄 Reavaliar", f"rv:{pedido_id}"), ("✏️ Corrigir", f"fix:{pedido_id}")]
+        if detalhes:
+            texto = resultado(pedido, c, mercado, veredicto, recolhido, agora)
+            return Resposta(texto, [[("📌 Resumo", f"res:{avaliacao_id}"), *acoes]], pedido_id)
+        texto = resumo(c, mercado, veredicto, recolhido, agora)
+        return Resposta(texto, [[("📋 Detalhes", f"det:{avaliacao_id}"), *acoes]], pedido_id)
 
     async def _pesquisar(self, pedido: Pedido, progresso: Callable[[str], None]) -> Mercado:
         progresso("🈂️ A preparar a pesquisa…")

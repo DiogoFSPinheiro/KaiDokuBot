@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import time
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -28,7 +29,8 @@ CREATE TABLE IF NOT EXISTS avaliacoes (
     mercado_json TEXT NOT NULL,
     veredicto TEXT NOT NULL,
     da_cache INTEGER NOT NULL,
-    criado_em REAL NOT NULL
+    criado_em REAL NOT NULL,
+    dados_de REAL  -- quando os dados de mercado foram recolhidos (≠ criado_em nas respostas da cache)
 );
 CREATE INDEX IF NOT EXISTS avaliacoes_chave ON avaliacoes (chave, criado_em);
 CREATE TABLE IF NOT EXISTS kv (
@@ -53,11 +55,28 @@ def inicio_do_dia_tokyo(agora: float) -> float:
     return dia.timestamp()
 
 
+@dataclass(frozen=True)
+class Avaliacao:
+    pedido_id: int
+    pedido: Pedido  # como estava quando foi avaliado
+    mercado_json: str
+    da_cache: bool
+    dados_de: float
+    criado_em: float
+
+
 class Storage:
     def __init__(self, path: str = ":memory:") -> None:
         self._db = sqlite3.connect(path)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(_SCHEMA)
+        self._migrar()
+
+    def _migrar(self) -> None:
+        colunas = {row["name"] for row in self._db.execute("PRAGMA table_info(avaliacoes)")}
+        if "dados_de" not in colunas:
+            with self._db:
+                self._db.execute("ALTER TABLE avaliacoes ADD COLUMN dados_de REAL")
 
     def close(self) -> None:
         self._db.close()
@@ -83,16 +102,30 @@ class Storage:
 
     def add_avaliacao(
         self, chat_id: int, pedido_id: int, pedido: Pedido, chave: str, mercado_json: str, veredicto: str,
-        da_cache: bool, now: float | None = None,
+        da_cache: bool, dados_de: float | None = None, now: float | None = None,
     ) -> int:  # fmt: skip
+        now = time.time() if now is None else now
         with self._db:
             cur = self._db.execute(
                 "INSERT INTO avaliacoes (chat_id, pedido_id, nome, preco_yen, estado, chave, mercado_json, veredicto, "
-                "da_cache, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "da_cache, criado_em, dados_de) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (chat_id, pedido_id, pedido.nome, pedido.preco_yen, pedido.estado, chave, mercado_json, veredicto,
-                 int(da_cache), time.time() if now is None else now),
+                 int(da_cache), now, now if dados_de is None else dados_de),
             )  # fmt: skip
         return cur.lastrowid
+
+    def get_avaliacao(self, avaliacao_id: int) -> Avaliacao | None:
+        row = self._db.execute("SELECT * FROM avaliacoes WHERE id = ?", (avaliacao_id,)).fetchone()
+        if row is None:
+            return None
+        return Avaliacao(
+            pedido_id=row["pedido_id"],
+            pedido=Pedido(row["nome"], row["preco_yen"], row["estado"]),
+            mercado_json=row["mercado_json"],
+            da_cache=bool(row["da_cache"]),
+            dados_de=row["dados_de"] if row["dados_de"] is not None else row["criado_em"],
+            criado_em=row["criado_em"],
+        )
 
     def cache(self, chave: str, desde: float) -> tuple[str, float] | None:
         """Dados de mercado da avaliação mais recente (feita de raiz) desde `desde`: (json, criado_em)."""

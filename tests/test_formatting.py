@@ -41,7 +41,7 @@ def test_resposta_imediata_sem_nota_acima_do_minimo():
 
 
 # --- resultado da avaliação (fase 2) ---------------------------------------------------
-from kaidokubot.formatting import resultado  # noqa: E402
+from kaidokubot.formatting import resultado, resumo  # noqa: E402
 from kaidokubot.rules import calcular_veredicto  # noqa: E402
 from tests.test_rules import _mercado  # noqa: E402
 
@@ -106,3 +106,40 @@ def test_nome_da_loja_longo_e_cortado():
                  vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None)  # fmt: skip
     linha = next(l for l in _resultado(m).splitlines() if l.startswith("🇪🇺"))
     assert linha == "🇪🇺 Novo €54.90 (Amazon)"
+
+
+
+# --- resumo compacto ----------------------------------------------------------------
+def _resumo(m, criado_em=None, agora=1_000_000.0, taxa=TAXA, preco=4800):
+    c = contas(preco, taxa)
+    return resumo(c, m, calcular_veredicto(m, c, taxa, 20), criado_em, agora)
+
+
+def test_resumo_compacto():
+    assert _resumo(_mercado()).splitlines() == [
+        "🟢 <b>Compensa</b> · poupas €29 (54%)",
+        "💴 Máximo ¥8.300",
+        "🇪🇺 Vinted ~€50 · novo €55 (JapanDco) · importar ~€63",
+        "🇯🇵 Mercari ¥3.900–4.500 · 👀 caro aqui",
+    ]
+
+
+def test_resumo_nao_compensa_sem_japao_com_avisos_e_cache():
+    m = _mercado(vinted_tipico_eur=16.0, novo_eu_eur=None, importar_yen=None, jp_min_yen=None, jp_max_yen=None,
+                 avisos=["Mercari indisponível"])  # fmt: skip
+    assert _resumo(m, criado_em=1_000_000.0 - 2 * 86400).splitlines() == [
+        "🔴 <b>Não compensa</b> · €5 mais caro que na Europa",
+        "💴 Máximo ¥3.000",
+        "🇪🇺 Vinted ~€16",
+        "⚠️ Mercari indisponível",
+        "🕒 avaliado há 2 dias",
+    ]
+
+
+def test_resumo_incerto_e_so_pedidos():
+    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None,
+                 importar_yen=None, jp_so_pedidos=True, jp_max_yen=4900.0)  # fmt: skip
+    assert _resumo(m).splitlines() == [
+        "⚪ <b>Incerto</b> · sem preços europeus fiáveis",
+        "🇯🇵 Mercari à venda ¥3.900–4.900",
+    ]

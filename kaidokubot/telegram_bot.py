@@ -201,6 +201,17 @@ def build_application(
             kind, pedido_id = query.data.split(":")
             await avaliar_em(query.message, update.effective_chat.id, int(pedido_id), kind == "rv")
 
+        async def on_detalhes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            query = update.callback_query
+            await query.answer()
+            if update.effective_chat is None or update.effective_chat.id != settings.allowed_chat_id:
+                return
+            kind, avaliacao_id = query.data.split(":")
+            r = avaliador.mostrar(int(avaliacao_id), detalhes=kind == "det")
+            await edit(query, r.texto, r)
+
+        app.add_handler(CallbackQueryHandler(on_detalhes, pattern=r"^(det|res):\d+$"))
+
         # block=False: a avaliação demora minutos e não pode bloquear as respostas imediatas.
         app.add_handler(CallbackQueryHandler(on_avaliar, pattern=r"^(av|rv):\d+$", block=False))
 

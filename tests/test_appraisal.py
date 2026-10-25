@@ -44,8 +44,8 @@ async def test_avaliacao_completa(storage):
     vinted = FakeVinted([Anuncio("Nendoroid Frieren 2367", 63.7, "Novo com etiquetas")])
     progresso = []
     r = await _avaliador(storage, runner, mercari, vinted).avaliar(1, 1, False, progresso.append)
-    assert r.texto.splitlines()[1].startswith("🟢 <b>Compensa</b>")
-    assert r.botoes == [[("🔄 Reavaliar", "rv:1"), ("✏️ Corrigir", "fix:1")]]
+    assert r.texto.splitlines()[0].startswith("🟢 <b>Compensa</b>")
+    assert r.botoes == [[("📋 Detalhes", "det:1"), ("🔄 Reavaliar", "rv:1"), ("✏️ Corrigir", "fix:1")]]
     assert (mercari.termos, vinted.termos) == (["ねんどろいど フリーレン"], ["nendoroid frieren"])
     assert [tipo for tipo, _, _ in runner.chamadas] == ["termos", "mercado"]
     _, prompt, tools = runner.chamadas[1]
@@ -59,7 +59,9 @@ async def test_avaliacao_completa(storage):
 
 
 async def test_fontes_do_mercari_e_vinted_acrescentadas(storage):
-    r = await _avaliador(storage).avaliar(1, 1, False, lambda _: None)
+    avaliador = _avaliador(storage)
+    await avaliador.avaliar(1, 1, False, lambda _: None)
+    r = avaliador.mostrar(1, detalhes=True)
     assert "jp.mercari.com/search?keyword=" in r.texto
     assert "www.vinted.pt/catalog?search_text=nendoroid+frieren" in r.texto
 
@@ -73,7 +75,7 @@ async def test_segunda_vez_usa_cache_com_o_preco_atual(storage):
     clock.now += 2 * 86400
     r = await avaliador.avaliar(1, 2, False, lambda _: None)
     assert len(runner.chamadas) == 2  # só a primeira avaliação chamou o Claude
-    assert "¥9.000" in r.texto
+    assert r.texto.startswith("🟡 <b>Pouca diferença</b>")  # recalculado para ¥9.000 (era 🟢 a ¥4.800)
     assert r.texto.splitlines()[-1] == "🕒 avaliado há 2 dias"
     assert storage.contar_avaliacoes(0) == 1
 
@@ -152,3 +154,27 @@ async def test_fila_e_cache_partilhada(storage):
 async def test_pedido_inexistente(storage):
     r = await _avaliador(storage).avaliar(1, 99, False, lambda _: None)
     assert r.texto.startswith("Já não tenho esse pedido")
+
+
+async def test_detalhes_e_resumo(storage):
+    clock = FakeClock()
+    avaliador = _avaliador(storage, clock=clock)
+    resumo_r = await avaliador.avaliar(1, 1, False, lambda _: None)
+    clock.now += 3 * 3600
+    det = avaliador.mostrar(1, detalhes=True)
+    assert det.texto.startswith("📦 <b>nendoroid frieren</b>")
+    assert "Vendas no Mercari e anúncios na Vinted." in det.texto
+    assert det.botoes[0][0] == ("📌 Resumo", "res:1")
+    assert det.texto.splitlines()[-1] == "🕒 avaliado há 3 h"
+    assert avaliador.mostrar(1, detalhes=False).texto.splitlines()[:4] == resumo_r.texto.splitlines()[:4]
+    assert avaliador.mostrar(99, detalhes=True).texto.startswith("Já não tenho")
+
+
+async def test_cache_guarda_quando_os_dados_foram_recolhidos(storage):
+    clock = FakeClock()
+    avaliador = _avaliador(storage, clock=clock)
+    await avaliador.avaliar(1, 1, False, lambda _: None)
+    clock.now += 2 * 86400
+    await avaliador.avaliar(1, 1, False, lambda _: None)  # da cache -> avaliação 2
+    clock.now += 86400
+    assert avaliador.mostrar(2, detalhes=False).texto.splitlines()[-1] == "🕒 avaliado há 3 dias"

@@ -149,3 +149,43 @@ def resultado(p: Pedido, c: Contas, m: Mercado, v: Veredicto, criado_em: float |
     if criado_em is not None:
         lines.append(f"🕒 avaliado {_ha_quanto(agora - criado_em)}")
     return "\n".join(lines)
+
+
+def _eur0(valor: float) -> str:
+    return f"€{round(valor)}"
+
+
+_CURTO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença</b>",
+          "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>"}  # fmt: skip
+
+
+def resumo(c: Contas, m: Mercado, v: Veredicto, criado_em: float | None, agora: float) -> str:
+    """Resultado compacto para ler de pé na loja (o artigo já aparece citado por cima)."""
+    taxa = c.montra_eur / c.montra_yen if c.montra_eur is not None else None
+    cabecalho = _CURTO[v.codigo]
+    if v.codigo == "incerto" or v.poupanca_eur is None:
+        lines = [f"{cabecalho} · {escape(v.motivo or '')}"]
+    elif v.codigo == "nao":
+        lines = [f"{cabecalho} · {_eur0(-v.poupanca_eur)} mais caro que na Europa"]
+    else:
+        lines = [f"{cabecalho} · poupas {_eur0(v.poupanca_eur)} ({round(v.poupanca_pct)}%)"]
+    if v.max_montra_yen and v.max_montra_yen > 0:
+        lines.append(f"💴 Máximo {fmt_yen(v.max_montra_yen)}")
+    europa = []
+    if m.vinted_eur:
+        europa.append(f"Vinted ~{_eur0(m.vinted_eur)}")
+    if m.novo_eu_eur:
+        loja = loja_curta(m.novo_eu_loja)
+        europa.append(f"novo {_eur0(m.novo_eu_eur)}" + (f" ({escape(loja)})" if loja else ""))
+    if m.importar_yen and taxa is not None:
+        europa.append(f"importar ~{_eur0(importar_total_eur(m.importar_yen, taxa))}")
+    if europa:
+        lines.append("🇪🇺 " + " · ".join(europa))
+    jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
+    if jp:
+        linha = f"🇯🇵 Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp}"
+        lines.append(linha + (" · 👀 caro aqui" if v.caro_no_japao else ""))
+    lines += [f"⚠️ {escape(aviso)}" for aviso in m.avisos]
+    if criado_em is not None:
+        lines.append(f"🕒 avaliado {_ha_quanto(agora - criado_em)}")
+    return "\n".join(lines)

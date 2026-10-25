@@ -65,8 +65,8 @@ def test_chave_cache_depende_do_estado():
     assert chave_cache("nendoroid frieren", "selado") != chave_cache("nendoroid frieren", "usado")
 
 
-def _avaliar(storage, chave, now, da_cache=False, mercado='{"x": 1}'):
-    return storage.add_avaliacao(1, 1, PEDIDO, chave, mercado, "compensa", da_cache, now=now)
+def _avaliar(storage, chave, now, da_cache=False, mercado='{"x": 1}', dados_de=None):
+    return storage.add_avaliacao(1, 1, PEDIDO, chave, mercado, "compensa", da_cache, dados_de=dados_de, now=now)
 
 
 def test_cache_devolve_o_mais_recente_dentro_do_prazo():
@@ -101,3 +101,29 @@ def test_inicio_do_dia_tokyo():
     # 25/10 15:30 UTC = 26/10 00:30 em Tóquio -> o dia começou às 26/10 00:00 JST = 25/10 15:00 UTC.
     agora = datetime(2026, 10, 25, 15, 30, tzinfo=timezone.utc).timestamp()
     assert inicio_do_dia_tokyo(agora) == datetime(2026, 10, 25, 15, 0, tzinfo=timezone.utc).timestamp()
+
+
+
+def test_get_avaliacao():
+    storage = Storage()
+    aval_id = _avaliar(storage, "k", 200.0, da_cache=True, mercado='{"v": 2}', dados_de=100.0)
+    a = storage.get_avaliacao(aval_id)
+    assert (a.pedido_id, a.pedido, a.mercado_json, a.dados_de) == (1, PEDIDO, '{"v": 2}', 100.0)
+    assert storage.get_avaliacao(99) is None
+
+
+def test_migra_tabela_antiga_sem_dados_de(tmp_path):
+    import sqlite3
+
+    path = str(tmp_path / "velho.db")
+    db = sqlite3.connect(path)
+    db.execute(
+        "CREATE TABLE avaliacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, pedido_id INTEGER NOT NULL, "
+        "nome TEXT NOT NULL, preco_yen INTEGER NOT NULL, estado TEXT NOT NULL, chave TEXT NOT NULL, mercado_json TEXT NOT NULL, "
+        "veredicto TEXT NOT NULL, da_cache INTEGER NOT NULL, criado_em REAL NOT NULL)"
+    )
+    db.commit()
+    db.close()
+    storage = Storage(path)
+    aval_id = _avaliar(storage, "k", 5.0, dados_de=1.0)
+    assert storage.get_avaliacao(aval_id).dados_de == 1.0
