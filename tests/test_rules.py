@@ -141,3 +141,27 @@ def test_sem_europa_e_um_so_vendido_continua_incerto():
 
 def test_sem_europa_sem_cambio_compara_com_o_mercari_na_mesma():
     assert calcular_veredicto(_sem_europa(), contas(4800, None), None, 20).codigo == "jp_caro"
+
+
+
+# --- modo Europa (preço em €) -----------------------------------------------------------
+from kaidokubot.rules import calcular_veredicto_eur  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "preco, codigo",
+    [(45.0, "eu_bom"), (50.0, "eu_normal"), (56.0, "eu_normal"), (60.0, "eu_caro")],
+)
+def test_veredicto_em_euros(preco, codigo):
+    # Melhor alternativa: Vinted típico €50 + €4 de portes = €54 (o novo está a €54.90; não há importar).
+    v = calcular_veredicto_eur(_mercado(), preco)
+    assert v.codigo == codigo
+    assert v.melhor == ("Vinted", 54.0)
+    assert v.max_eur == 54.0
+    assert v.max_montra_yen is None and v.caro_no_japao is False
+
+
+def test_veredicto_em_euros_ignora_importar_e_japao():
+    m = _mercado(novo_eu_eur=None, vinted_tipico_eur=None, vinted_min_eur=None, vinted_max_eur=None)
+    v = calcular_veredicto_eur(m, 30.0)
+    assert (v.codigo, v.motivo) == ("incerto", "sem preços europeus fiáveis")

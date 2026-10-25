@@ -16,7 +16,7 @@ from kaidokubot.fontes import KUANTOKUSTA_URL, Anuncio, FonteError
 from kaidokubot.formatting import fmt_eur, fmt_yen, resultado, resumo
 from kaidokubot.fx import Cambio
 from kaidokubot.parsing import Pedido
-from kaidokubot.rules import Mercado, calcular_veredicto, contas
+from kaidokubot.rules import Mercado, Veredicto, calcular_veredicto, calcular_veredicto_eur, contas
 from kaidokubot.storage import Storage, chave_cache, inicio_do_dia_tokyo
 
 log = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ def prompt_termos(pedido: Pedido) -> str:
         "Identifica o produto EXATO: fabricante, linha/série, personagem, nº ou tamanho. Faz 1 ou 2 pesquisas na web "
         "se o nome for ambíguo (ex.: «emilia 17cm» pode ser a Good Smile KADOKAWA Collection Light, uma Pop Up "
         "Parade ou uma figura de prémio da SEGA/Taito; escolhe a que bate certo com os detalhes e com o preço "
-        f"de ¥{pedido.preco_yen}).\n"
+        f"de {fmt_eur(pedido.preco_eur) if pedido.em_euros else fmt_yen(pedido.preco_yen)}).\n"
         "fabricante, linha, personagem e referencia: curtos, sem descrições (nada de tamanhos, escultores ou "
         "cenas). referencia só quando há nº de catálogo ou versão.\n"
         "termo_jp: como aparece nos anúncios do Mercari Japão, específico o suficiente para não apanhar outras "
@@ -137,6 +137,8 @@ def prompt_mercado(
     vinted: list[Anuncio] | None, kuantokusta: list[Anuncio] | None,
 ) -> str:  # fmt: skip
     identificado = " ".join(p for p in (termos.get("fabricante"), produto_de(termos)) if p) or pedido.nome
+    if pedido.em_euros:
+        return _prompt_europa(pedido, termos, identificado, vinted, kuantokusta)
     lines = [
         f"Artigo: {pedido.nome}. Produto identificado: {identificado} "
         f"(termo japonês: {termos['termo_jp']}; inglês: {termos['termo_en']}).",
@@ -178,6 +180,35 @@ def prompt_mercado(
         "campos principais o cenário usado. Senão, cenarios fica vazio.",
         "5. Nunca inventes números: null no que não encontrares. razao: no máximo 2 frases curtas para ler de pé "
         "numa loja (de onde vêm os números e se só havia preços pedidos). fontes: 2 a 4 páginas que usaste.",
+    ]
+    return "\n".join(lines)
+
+
+def _prompt_europa(
+    pedido: Pedido, termos: dict, identificado: str, vinted: list[Anuncio] | None, kuantokusta: list[Anuncio] | None
+) -> str:
+    """Modo Europa: estou em Portugal; só interessa a Europa (sem Mercari nem importação)."""
+    lines = [
+        f"Artigo: {pedido.nome}. Produto identificado: {identificado} (inglês: {termos['termo_en']}).",
+        f"Estado: {pedido.estado}.",
+        f"Estou em Portugal e custa {fmt_eur(pedido.preco_eur)}. Quero saber se é um bom preço na Europa.",
+        "",
+        "Vinted (Europa; preços pedidos em € com a proteção do comprador, sem portes):",
+        *_lista(vinted, fmt_eur, "V"),
+        "",
+        "KuantoKusta (comparador português; preço novo mais baixo entre lojas que vendem para Portugal):",
+        *_lista(kuantokusta, fmt_eur, "K"),
+        "",
+        "Só contam anúncios do MESMO produto (mesmo fabricante, linha e tamanho); o distribuidor europeu pode "
+        "aparecer em vez do fabricante (correspondência provável, diz isso na razao). Dá os intervalos mesmo com 1 "
+        "ou 2 comparáveis; null só se não houver nenhum.",
+        "1. Vinted: intervalo típico (€) no mesmo estado (vinted_min_eur, vinted_max_eur, vinted_n) e a mediana "
+        "(vinted_tipico_eur).",
+        "2. Preço novo (novo_eu_eur, novo_eu_loja, novo_eu_link): o KuantoKusta se tiver o MESMO produto (link = "
+        "o código [K#]); senão pesquisa na web lojas europeias (nome exato com «€»), só preços atuais da página da "
+        "loja (link = o URL).",
+        "3. Os campos do Japão e da importação (jp_*, importar_*) ficam null; cenarios só com estado desconhecido.",
+        "4. Nunca inventes números. razao: no máximo 2 frases curtas. fontes: 2 a 4 páginas que usaste.",
     ]
     return "\n".join(lines)
 
@@ -255,7 +286,9 @@ class Avaliador:
         pedido = self._storage.get_pedido(pedido_id)
         if pedido is None:
             return Resposta(NAO_EXISTE)
-        chave = chave_cache(pedido.nome, pedido.estado)
+        # Cache separada por modo: a do Japão tem o Mercari, a da Europa não.
+        modo = "eur:" if pedido.em_euros else ""
+        chave = chave_cache(modo + pedido.nome, pedido.estado)
         if not forcar and (cache := self._da_cache(self._storage.cache, chave)):
             return self._registar(chat_id, pedido_id, pedido, chave, *cache, da_cache=True)
         if self._storage.contar_avaliacoes(inicio_do_dia_tokyo(self._now())) >= self._max_dia:
@@ -280,7 +313,7 @@ class Avaliador:
                     termos = await self._identificar(pedido, progresso)
                 chave_produto = None
                 if termos.get("linha") or termos.get("personagem"):
-                    chave_produto = chave_cache(f"produto:{identidade_de(termos)}", pedido.estado)
+                    chave_produto = chave_cache(f"produto:{modo}{identidade_de(termos)}", pedido.estado)
                 # O mesmo produto pode já ter sido avaliado com outro texto.
                 cache = self._da_cache(self._storage.cache_produto, chave_produto) if chave_produto else None
                 if not forcar and cache:
@@ -317,14 +350,19 @@ class Avaliador:
         *, da_cache: bool, chave_produto: str | None = None,
     ) -> Resposta:  # fmt: skip
         """Guarda a avaliação no histórico e devolve o resumo. dados_de: quando os dados foram recolhidos (cache)."""
-        taxa = self._cambio.taxa()
-        veredicto = calcular_veredicto(mercado, contas(pedido.preco_yen, taxa), taxa, self._margem)
+        veredicto = self._veredicto(pedido, mercado)
         mercado_json = json.dumps(mercado.to_dict(), ensure_ascii=False)
         avaliacao_id = self._storage.add_avaliacao(
             chat_id, pedido_id, pedido, chave, mercado_json, veredicto.codigo, da_cache,
             dados_de=dados_de, chave_produto=chave_produto, now=self._now(),
         )  # fmt: skip
         return self.mostrar(avaliacao_id, detalhes=False)
+
+    def _veredicto(self, pedido: Pedido, mercado: Mercado) -> Veredicto:
+        if pedido.em_euros:
+            return calcular_veredicto_eur(mercado, pedido.preco_eur)
+        taxa = self._cambio.taxa()
+        return calcular_veredicto(mercado, contas(pedido.preco_yen, taxa), taxa, self._margem)
 
     def mostrar(self, avaliacao_id: int, *, detalhes: bool) -> Resposta:
         """Resumo compacto ou versão completa de uma avaliação (botões «📋 Detalhes» / «📌 Resumo»)."""
@@ -333,9 +371,8 @@ class Avaliador:
             return Resposta(NAO_EXISTE)
         mercado = Mercado.from_dict(json.loads(avaliacao.mercado_json))
         pedido, pedido_id = avaliacao.pedido, avaliacao.pedido_id
-        taxa = self._cambio.taxa()
-        c = contas(pedido.preco_yen, taxa)
-        veredicto = calcular_veredicto(mercado, c, taxa, self._margem)
+        c = contas(pedido.preco_yen, self._cambio.taxa())
+        veredicto = self._veredicto(pedido, mercado)
         agora = self._now()
         # "🕒 avaliado há…" só quando os dados não são de agora (cache ou mostrado mais tarde).
         recolhido = avaliacao.dados_de if avaliacao.da_cache or agora - avaliacao.dados_de >= 300 else None
@@ -343,7 +380,7 @@ class Avaliador:
         if detalhes:
             texto = resultado(pedido, c, mercado, veredicto, recolhido, agora)
             return Resposta(texto, [[("📌 Resumo", f"res:{avaliacao_id}"), *acoes]], pedido_id)
-        texto = resumo(c, mercado, veredicto, recolhido, agora, estado=pedido.estado)
+        texto = resumo(c, mercado, veredicto, recolhido, agora, estado=pedido.estado, preco_eur=pedido.preco_eur)
         return Resposta(texto, [[("📋 Detalhes", f"det:{avaliacao_id}"), *acoes]], pedido_id)
 
     async def _identificar(self, pedido: Pedido, progresso: Callable[[str], None]) -> dict:
@@ -357,14 +394,22 @@ class Avaliador:
         return termos
 
     async def _pesquisar(self, pedido: Pedido, termos: dict, progresso: Callable[[str], None]) -> Mercado:
-        progresso(f"🔎 A procurar no Mercari, Vinted e KuantoKusta ({produto_de(termos) or termos['termo_en']})…")
+        fontes = "na Vinted e no KuantoKusta" if pedido.em_euros else "no Mercari, na Vinted e no KuantoKusta"
+        progresso(f"🔎 A procurar {fontes} ({produto_de(termos) or termos['termo_en']})…")
+        async def sem_mercari():
+            return None
+
+        # Em euros (em Portugal) o Japão não interessa: não vai ao Mercari.
+        procurar_mercari = sem_mercari() if pedido.em_euros else self._mercari.procurar(termos["termo_jp"])
         mercari, vinted, kuantokusta = await asyncio.gather(
-            self._mercari.procurar(termos["termo_jp"]), self._vinted.procurar(termos["termo_en"]),
+            procurar_mercari, self._vinted.procurar(termos["termo_en"]),
             self._kuantokusta.procurar(termos["termo_en"]), return_exceptions=True,
         )  # fmt: skip
         avisos = []
         vendidos = a_venda = anuncios_vinted = novos = None
-        if isinstance(mercari, BaseException):
+        if mercari is None:
+            pass
+        elif isinstance(mercari, BaseException):
             log.warning("Mercari falhou: %s", mercari)
             avisos.append("Mercari indisponível")
         else:
@@ -382,10 +427,11 @@ class Avaliador:
         if isinstance(mercari, BaseException) and not isinstance(mercari, FonteError):
             log.error("Erro inesperado no Mercari", exc_info=mercari)
         resumo = (
-            f"🔎 Mercari: {len(vendidos) if vendidos is not None else '–'} vendidos · "
-            f"Vinted: {len(anuncios_vinted) if anuncios_vinted is not None else '–'} anúncios · "
-            f"KuantoKusta: {len(novos) if novos is not None else '–'}"
+            ("" if pedido.em_euros else f"Mercari: {len(vendidos) if vendidos is not None else '–'} vendidos · ")
+            + f"Vinted: {len(anuncios_vinted) if anuncios_vinted is not None else '–'} anúncios · "
+            + f"KuantoKusta: {len(novos) if novos is not None else '–'}"
         )
+        resumo = f"🔎 {resumo}"
         progresso(f"{resumo}\n🌐 A pesquisar lojas na web…")
 
         def on_search(query: str) -> None:

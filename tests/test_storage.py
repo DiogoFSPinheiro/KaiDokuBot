@@ -149,3 +149,13 @@ def test_termos_do_pedido():
     storage.set_termos(pedido_id, None)
     assert storage.get_termos(pedido_id) is None
     assert storage.get_termos(storage.add_pedido(1, PEDIDO)) is None
+
+
+
+def test_pedido_em_euros_ida_e_volta():
+    storage = Storage()
+    pedido = Pedido("nendoroid frieren", 0, "usado", 29.99)
+    pedido_id = storage.add_pedido(1, pedido)
+    assert storage.get_pedido(pedido_id) == pedido
+    storage.update_pedido(pedido_id, Pedido("nendoroid frieren", 4800, "usado"))
+    assert storage.get_pedido(pedido_id).preco_eur is None

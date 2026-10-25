@@ -58,6 +58,8 @@ def texto_cambio(e: EstadoCambio) -> str:
 
 
 def resposta_imediata(p: Pedido, c: Contas) -> str:
+    if p.em_euros:
+        return f"📦 <b>{escape(p.nome)}</b> · {fmt_eur(p.preco_eur)}\nEstado: {escape(p.estado)}"
     lines = [f"📦 <b>{escape(p.nome)}</b>", escape(linha_contas(c)), f"Estado: {escape(p.estado)}"]
     if abaixo_do_minimo(p.preco_yen):
         minimo = fmt_yen(MINIMO_SEM_IMPOSTO * (1 + IMPOSTO))
@@ -70,7 +72,8 @@ MAX_FONTES = 8
 _CABECALHO = {"compensa": "🟢 <b>Compensa</b>", "pouca": "🟡 <b>Pouca diferença</b>",
               "nao": "🔴 <b>Não compensa</b>", "incerto": "⚪ <b>Incerto</b>",
               "jp_bom": "🟢 <b>Bom preço para o Japão</b>", "jp_normal": "🟡 <b>Preço normal no Japão</b>",
-              "jp_caro": "🔴 <b>Caro para o Japão</b>"}  # fmt: skip
+              "jp_caro": "🔴 <b>Caro para o Japão</b>",
+              "eu_bom": "🟢 <b>Bom preço</b>", "eu_normal": "🟡 <b>Preço normal</b>", "eu_caro": "🔴 <b>Caro</b>"}  # fmt: skip
 
 
 def _ha_quanto(segundos: float) -> str:
@@ -84,6 +87,8 @@ def _ha_quanto(segundos: float) -> str:
 
 def _linha_veredicto(v: Veredicto) -> str:
     cabecalho = _CABECALHO[v.codigo]
+    if v.codigo.startswith("eu_"):
+        return _linha_veredicto_eur(v)
     if v.codigo.startswith("jp_"):
         return f"{cabecalho} — sem preços europeus; comparado com os vendidos no Mercari"
     if v.codigo == "incerto" or v.melhor is None or v.poupanca_eur is None:
@@ -92,6 +97,12 @@ def _linha_veredicto(v: Veredicto) -> str:
     if v.codigo == "nao":
         return f"{cabecalho} — {fmt_eur(-v.poupanca_eur)} mais caro que {rotulo}"
     return f"{cabecalho} — poupas {fmt_eur(v.poupanca_eur)} ({round(v.poupanca_pct)}%) face a {rotulo}"
+
+
+def _linha_veredicto_eur(v: Veredicto) -> str:
+    diferenca = abs(v.poupanca_eur)
+    lado = "abaixo" if v.poupanca_eur >= 0 else "acima"
+    return f"{_CABECALHO[v.codigo]} · {_eur0(diferenca)} {lado} da Europa ({round(abs(v.poupanca_pct))}%)"
 
 
 def _linha_europa(m: Mercado, taxa: float | None) -> str | None:
@@ -143,13 +154,20 @@ def resultado(p: Pedido, c: Contas, m: Mercado, v: Veredicto, criado_em: float |
     """Resultado da avaliação (HTML). criado_em != None quando vem da cache."""
     taxa = c.montra_eur / c.montra_yen if c.montra_eur is not None else None
     liquido = f" → {fmt_eur(c.liquido_eur)} após reembolso" if c.liquido_eur is not None else ""
-    lines = [f"📦 <b>{escape(p.nome)}</b> · {fmt_yen(c.montra_yen)}{liquido}"]
+    if p.em_euros:
+        taxa = None  # modo Europa: sem importação nem Japão
+        lines = [f"📦 <b>{escape(p.nome)}</b> · {fmt_eur(p.preco_eur)}"]
+    else:
+        lines = [f"📦 <b>{escape(p.nome)}</b> · {fmt_yen(c.montra_yen)}{liquido}"]
     if m.produto:
         lines.append(f"🔍 {escape(m.produto)}")
     lines.append(_linha_veredicto(v))
+    if v.max_eur:
+        lines.append(f"💶 Máximo {fmt_eur(v.max_eur)}")
     if v.max_montra_yen and v.max_montra_yen > 0:
         lines.append(f"💴 Pagaria no máximo {fmt_yen(v.max_montra_yen)}")
-    lines += [linha for linha in (_linha_europa(m, taxa), _linha_japao(m, taxa)) if linha]
+    japao = None if p.em_euros else _linha_japao(m, taxa)
+    lines += [linha for linha in (_linha_europa(m, taxa), japao) if linha]
     lines += [_linha_cenario(cenario) for cenario in m.cenarios]
     if v.caro_no_japao:
         lines.append("👀 Acima do normal no Japão — vê noutras lojas")
@@ -184,12 +202,16 @@ _CURTO = _CABECALHO
 
 
 def resumo(
-    c: Contas, m: Mercado, v: Veredicto, criado_em: float | None, agora: float, *, estado: str = "desconhecido"
+    c: Contas, m: Mercado, v: Veredicto, criado_em: float | None, agora: float, *, estado: str = "desconhecido",
+    preco_eur: float | None = None,
 ) -> str:
     """Resultado compacto para ler de pé na loja (o artigo já aparece citado por cima)."""
-    taxa = c.montra_eur / c.montra_yen if c.montra_eur is not None else None
+    euros = preco_eur is not None  # modo Europa: sem importação nem Japão
+    taxa = c.montra_eur / c.montra_yen if c.montra_eur and c.montra_yen and not euros else None
     cabecalho = _CURTO[v.codigo]
-    if v.codigo.startswith("jp_") or v.codigo == "incerto" or v.poupanca_eur is None:
+    if v.codigo.startswith("eu_"):
+        lines = [_linha_veredicto_eur(v)]
+    elif v.codigo.startswith("jp_") or v.codigo == "incerto" or v.poupanca_eur is None:
         lines = [f"{cabecalho} · {escape(v.motivo or '')}"]
     elif v.codigo == "nao":
         lines = [f"{cabecalho} · {_eur0(-v.poupanca_eur)} mais caro que na Europa"]
@@ -197,6 +219,8 @@ def resumo(
         lines = [f"{cabecalho} · poupas {_eur0(v.poupanca_eur)} ({round(v.poupanca_pct)}%)"]
     if v.max_montra_yen and v.max_montra_yen > 0:
         lines.append(f"💴 Máximo {fmt_yen(v.max_montra_yen)}")
+    if v.max_eur:
+        lines.append(f"💶 Máximo {_eur0(v.max_eur)}")
     # O link fica só no nome da fonte: os valores ficam em texto normal, para se lerem bem.
     europa = []
     if m.vinted_eur:
@@ -210,7 +234,7 @@ def resumo(
         europa.append(f"{_link('importar', m.importar_url)} ~{_eur0(importar_total_eur(m.importar_yen, taxa))}")
     if europa:
         lines.append("🇪🇺 " + " · ".join(europa))
-    jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
+    jp = None if euros else _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
     if jp:
         linha = f"{_link('Mercari', m.mercari_url)} {'à venda ' if m.jp_so_pedidos else ''}{jp}"
         linha += f"{_mercari_em_eur(m, taxa)} ({m.jp_n})"

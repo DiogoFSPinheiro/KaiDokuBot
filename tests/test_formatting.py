@@ -195,3 +195,31 @@ def test_resumo_caro_para_o_japao():
         "💴 Máximo ¥4.500",
         "🇯🇵 Mercari ¥3.900–4.500 ≈ €22–26 (8)",
     ]
+
+
+
+# --- modo Europa ------------------------------------------------------------------------
+from kaidokubot.rules import calcular_veredicto_eur  # noqa: E402
+
+
+def test_resposta_imediata_em_euros():
+    texto = resposta_imediata(Pedido("Nendoroid Frieren", 0, "usado", 29.99), contas(0, TAXA))
+    assert texto.splitlines() == ["📦 <b>Nendoroid Frieren</b> · €29.99", "Estado: usado"]
+
+
+def _resumo_eur(m, preco):
+    return resumo(contas(0, TAXA), m, calcular_veredicto_eur(m, preco), None, 1_000_000.0, estado="usado", preco_eur=preco)
+
+
+def test_resumo_em_euros():
+    assert _resumo_eur(_mercado(), 45.0).splitlines() == [
+        "🟢 <b>Bom preço</b> · €9 abaixo da Europa (17%)",
+        "💶 Máximo €54",
+        "🇪🇺 Vinted ~€50 (12) · novo €55 (JapanDco)",
+        "🔍 Nendoroid Frieren 2367",
+    ]
+
+
+def test_resumo_em_euros_caro_e_normal():
+    assert _resumo_eur(_mercado(), 60.0).splitlines()[0] == "🔴 <b>Caro</b> · €6 acima da Europa (11%)"
+    assert _resumo_eur(_mercado(), 56.0).splitlines()[0] == "🟡 <b>Preço normal</b> · €2 acima da Europa (4%)"

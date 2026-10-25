@@ -5,7 +5,7 @@ from html import escape
 
 from kaidokubot.formatting import resposta_imediata, texto_cambio
 from kaidokubot.fx import Cambio, parse_taxa
-from kaidokubot.parsing import ESTADOS, PRECO_MAX, PRECO_MIN, ParseError, Pedido, e_so_preco, parse_pedido, parse_preco
+from kaidokubot.parsing import ESTADOS, PRECO_MAX, PRECO_MIN, ParseError, Pedido, e_so_preco, parse_pedido, parse_preco_moeda
 from kaidokubot.rules import contas
 from kaidokubot.storage import Storage
 from kaidokubot.vision import Leitura
@@ -71,19 +71,25 @@ class Commands:
         else:
             if not e_so_preco(texto):
                 return None
-            preco = parse_preco(texto)
+            preco = parse_preco_moeda(texto)
             if preco is None:
                 self._esperando[chat_id] = (pedido_id, campo)
-                return Resposta(f"O preço tem de estar entre ¥{PRECO_MIN} e ¥{PRECO_MAX:,}.".replace(",", "."))
-            pedido = replace(pedido, preco_yen=preco)
+                return Resposta(
+                    f"O preço tem de estar entre ¥{PRECO_MIN} e ¥{PRECO_MAX:,} (ou em euros, ex.: 30€).".replace(",", ".")
+                )
+            valor, moeda = preco
+            if moeda == "EUR":
+                pedido = replace(pedido, preco_yen=0, preco_eur=float(valor))
+            else:
+                pedido = replace(pedido, preco_yen=int(valor), preco_eur=None)
         self._storage.update_pedido(pedido_id, pedido)
         return self._imediata(pedido_id, pedido)
 
     def foto(self, chat_id: int, leitura: Leitura) -> Resposta:
         """Pedido lido de uma foto: mostra o que percebeu e espera pela confirmação (não avalia sozinho)."""
-        pedido = Pedido(leitura.nome, leitura.preco_yen or 0, leitura.estado)
+        pedido = Pedido(leitura.nome, leitura.preco_yen or 0, leitura.estado, leitura.preco_eur)
         pedido_id = self._storage.add_pedido(chat_id, pedido, termos=leitura.termos)
-        if leitura.preco_yen is None:
+        if leitura.preco_yen is None and leitura.preco_eur is None:
             # A resposta seguinte (só o preço) completa o pedido e avalia.
             self._esperando[chat_id] = (pedido_id, "preco")
             return Resposta(

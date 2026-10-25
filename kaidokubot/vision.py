@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from kaidokubot.parsing import ESTADOS, PRECO_MAX, PRECO_MIN, parse_estado, parse_preco
+from kaidokubot.parsing import ESTADOS, PRECO_MAX, PRECO_MIN, parse_estado, parse_preco_moeda
 
 SYSTEM_FOTO = (
     "Lês fotos de etiquetas de preço e de caixas de merch japonesa (figuras, peluches, jogos, consolas) tiradas "
@@ -14,7 +14,7 @@ SYSTEM_FOTO = (
 PROMPT_FOTO = """Foto tirada numa loja no Japão (muitas vezes uma loja de usados: Mandarake, Suruga-ya, Book-Off, \
 Lashinbang). Pode ser a etiqueta, a caixa ou as duas.
 - nome: como um turista o escreveria, curto (ex.: «Nendoroid Frieren», «Zelda Tears of the Kingdom Switch»).
-- fabricante, linha, personagem, referencia (só nº de catálogo ou versão): curtos, sem descrições.
+- fabricante, linha, personagem, referencia (só nº de catálogo ou versão): curtos, sem descrições. Nos jogos, linha = a consola (ex.: «Nintendo Switch») e personagem = o título do jogo.
 - termo_jp: como aparece nos anúncios do Mercari Japão, específico (ex.: «ねんどろいど フリーレン 2367»).
 - termo_en: como apareceria num anúncio europeu (ex.: «nendoroid frieren 2367»).
 - preco_yen: o preço de venda. Se houver dois, o com imposto (税込). Ignora 税抜, números de catálogo, JAN e \
@@ -56,6 +56,7 @@ class Leitura:
     estado: str
     confianca: str  # alta | media | baixa
     termos: dict  # identificação do produto, no formato do passo «identificar» da avaliação
+    preco_eur: float | None = None  # legenda em euros → modo Europa
 
 
 def _preco(valor) -> int | None:
@@ -75,15 +76,22 @@ def leitura_de(dados: dict, legenda: str | None) -> Leitura:
     nome = str(dados.get("nome") or "").strip()
     if not nome:
         nome = " ".join(termos[campo] for campo in ("linha", "personagem", "referencia") if termos[campo])
+    if not termos["personagem"] and nome:
+        termos["personagem"] = nome  # ex.: jogos sem personagem: o título identifica o produto
     preco = _preco(dados.get("preco_yen"))
+    preco_eur = None
     estado = dados.get("estado") if dados.get("estado") in ESTADOS else "desconhecido"
     if legenda:
-        preco = parse_preco(legenda) or preco
+        legenda_preco = parse_preco_moeda(legenda)
+        if legenda_preco and legenda_preco[1] == "EUR":
+            preco, preco_eur = None, float(legenda_preco[0])
+        elif legenda_preco:
+            preco = int(legenda_preco[0])
         estado_legenda = parse_estado(legenda)
         if estado_legenda != "desconhecido":
             estado = estado_legenda
     confianca = dados.get("confianca") if dados.get("confianca") in ("alta", "media", "baixa") else "baixa"
-    return Leitura(nome or "?", preco, estado, confianca, termos)
+    return Leitura(nome or "?", preco, estado, confianca, termos, preco_eur)
 
 
 async def ler_foto(runner, imagem: bytes, media_type: str, legenda: str | None) -> Leitura:

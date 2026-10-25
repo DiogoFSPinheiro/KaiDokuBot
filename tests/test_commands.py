@@ -183,3 +183,25 @@ def test_corrigir_o_estado_mantem_a_identificacao(commands, storage):
     commands.foto(CHAT, _leitura())
     commands.definir_estado(1, 0)
     assert storage.get_termos(1) is not None
+
+
+
+def test_texto_em_euros(commands, storage):
+    r = commands.texto(CHAT, "nendoroid frieren 29,99€")
+    assert r.texto.splitlines()[0] == "📦 <b>nendoroid frieren</b> · €29.99"
+    assert storage.get_pedido(1).preco_eur == 29.99
+
+
+def test_corrigir_preco_para_euros(commands, storage):
+    commands.texto(CHAT, "nendoroid frieren 4800")
+    commands.pedir_campo(CHAT, 1, "preco")
+    commands.texto(CHAT, "30€")
+    assert (storage.get_pedido(1).preco_eur, storage.get_pedido(1).preco_yen) == (30.0, 0)
+
+
+def test_foto_com_legenda_em_euros(commands, storage):
+    from kaidokubot.vision import Leitura
+
+    r = commands.foto(CHAT, Leitura("Nendoroid Frieren", None, "usado", "alta", {}, preco_eur=30.0))
+    assert "€30.00" in r.texto
+    assert storage.get_pedido(1).preco_eur == 30.0

@@ -8,6 +8,9 @@ ESTADOS: tuple[str, ...] = ("selado", "novo", "usado", "sem caixa", "caixa danif
 
 PRECO_MIN = 100  # nada custa menos (um gashapon custa ¥200+); evita apanhar medidas soltas
 PRECO_MAX = 10_000_000
+PRECO_EUR_MIN = 1
+PRECO_EUR_MAX = 100_000
+FALTA_PRECO = "Falta o preço. Exemplo: nendoroid frieren 4800 (ou 30€, em Portugal)"
 
 # Palavras-chave por estado (pt-PT / inglês / japonês). Comparadas sem distinguir maiúsculas.
 _PALAVRAS = {
@@ -42,9 +45,11 @@ _RE_ESTADO = re.compile(
     re.IGNORECASE,
 )
 
-# O iene não tem decimais: "." e "," entre dígitos são sempre separadores de milhares.
+# "." e "," seguidos de 3 dígitos são milhares (o iene não tem decimais); seguidos de 1–2 dígitos, cêntimos (€).
 _RE_PRECO = re.compile(
-    r"(?<![a-z0-9])(?P<pre>¥\s*)?(?P<num>\d{1,3}(?:[.,]\d{3})+|\d+)(?P<pos>\s*(?:円|yen|jpy))?(?![a-z0-9])",
+    r"(?<![a-z0-9])(?P<pre>[¥€]\s*)?"
+    r"(?P<num>\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
+    r"(?P<pos>\s*(?:円|yen|jpy|€|euros?|eur))?(?![a-z0-9])",
     re.IGNORECASE,
 )
 
@@ -59,8 +64,13 @@ class ParseError(Exception):
 @dataclass(frozen=True)
 class Pedido:
     nome: str
-    preco_yen: int
+    preco_yen: int  # 0 nos pedidos em euros
     estado: str
+    preco_eur: float | None = None  # preço em € → modo Europa (em Portugal: sem Japão nem tax-free)
+
+    @property
+    def em_euros(self) -> bool:
+        return self.preco_eur is not None
 
 
 def _normalizar(texto: str) -> str:
@@ -81,16 +91,40 @@ def _encontrar_preco(texto: str) -> re.Match | None:
     return matches[-1] if matches else None
 
 
-def _valor(match: re.Match) -> int:
-    return int(re.sub(r"[.,]", "", match["num"]))
+def _valor(match: re.Match) -> float:
+    num = match["num"]
+    centimos = re.search(r"[.,](\d{1,2})$", num)
+    inteiro = num[: centimos.start()] if centimos else num
+    valor = float(re.sub(r"[.,]", "", inteiro))
+    return valor + int(centimos.group(1)) / 10 ** len(centimos.group(1)) if centimos else valor
 
 
-def parse_preco(texto: str) -> int | None:
+def _moeda(match: re.Match) -> str:
+    marcador = f"{match['pre'] or ''}{match['pos'] or ''}".lower()
+    return "EUR" if "€" in marcador or "eur" in marcador else "JPY"
+
+
+def _valido(valor: float, moeda: str) -> bool:
+    if moeda == "EUR":
+        return PRECO_EUR_MIN <= valor <= PRECO_EUR_MAX
+    return PRECO_MIN <= valor <= PRECO_MAX
+
+
+def parse_preco_moeda(texto: str) -> tuple[float, str] | None:
+    """(valor, "JPY" | "EUR"); sem moeda é iene. None se não houver preço válido."""
     match = _encontrar_preco(_normalizar(texto))
     if match is None:
         return None
-    valor = _valor(match)
-    return valor if PRECO_MIN <= valor <= PRECO_MAX else None
+    valor, moeda = _valor(match), _moeda(match)
+    if not _valido(valor, moeda):
+        return None
+    return (round(valor, 2), "EUR") if moeda == "EUR" else (int(round(valor)), "JPY")
+
+
+def parse_preco(texto: str) -> int | None:
+    """Preço em ienes (None se não houver, ou se estiver em euros)."""
+    resultado = parse_preco_moeda(texto)
+    return int(resultado[0]) if resultado and resultado[1] == "JPY" else None
 
 
 def e_so_preco(texto: str) -> bool:
@@ -112,12 +146,14 @@ def parse_pedido(texto: str) -> Pedido:
     texto = _normalizar(texto)
     preco = _encontrar_preco(texto)
     if preco is None:
-        raise ParseError("Falta o preço. Exemplo: nendoroid frieren 4800")
-    valor = _valor(preco)
+        raise ParseError(FALTA_PRECO)
+    valor, moeda = _valor(preco), _moeda(preco)
     if valor < PRECO_MIN and not (preco["pre"] or preco["pos"]):
         # Ex.: «switch 2» sem preço: o «2» não é um preço.
-        raise ParseError("Falta o preço. Exemplo: nendoroid frieren 4800")
-    if not PRECO_MIN <= valor <= PRECO_MAX:
+        raise ParseError(FALTA_PRECO)
+    if not _valido(valor, moeda):
+        if moeda == "EUR":
+            raise ParseError(f"O preço tem de estar entre €{PRECO_EUR_MIN} e €{PRECO_EUR_MAX:,}.".replace(",", "."))
         raise ParseError(f"O preço tem de estar entre ¥{PRECO_MIN} e ¥{PRECO_MAX:,}.".replace(",", "."))
     estados = list(_RE_ESTADO.finditer(texto))
     # O nome é o que sobra depois de tirar o preço e as palavras de estado.
@@ -128,4 +164,6 @@ def parse_pedido(texto: str) -> Pedido:
     nome = " ".join(nome.split()).strip(" ,;:-·/")
     if not nome:
         raise ParseError("Falta o nome do artigo. Exemplo: nendoroid frieren 4800")
-    return Pedido(nome=nome, preco_yen=valor, estado=_estado_de(estados))
+    if moeda == "EUR":
+        return Pedido(nome=nome, preco_yen=0, estado=_estado_de(estados), preco_eur=round(valor, 2))
+    return Pedido(nome=nome, preco_yen=int(round(valor)), estado=_estado_de(estados))

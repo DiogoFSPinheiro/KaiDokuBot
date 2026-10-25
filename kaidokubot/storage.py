@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
     preco_yen INTEGER NOT NULL,
     estado TEXT NOT NULL,
     criado_em REAL NOT NULL,
-    termos_json TEXT  -- identificação do produto lida da foto (a avaliação salta esse passo)
+    termos_json TEXT,  -- identificação do produto lida da foto (a avaliação salta esse passo)
+    preco_eur REAL  -- pedidos em euros (modo Europa)
 );
 CREATE TABLE IF NOT EXISTS avaliacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +34,8 @@ CREATE TABLE IF NOT EXISTS avaliacoes (
     da_cache INTEGER NOT NULL,
     criado_em REAL NOT NULL,
     dados_de REAL,  -- quando os dados de mercado foram recolhidos (≠ criado_em nas respostas da cache)
-    chave_produto TEXT  -- chave da cache pelo produto identificado
+    chave_produto TEXT,  -- chave da cache pelo produto identificado
+    preco_eur REAL
 );
 CREATE INDEX IF NOT EXISTS avaliacoes_chave ON avaliacoes (chave, criado_em);
 CREATE TABLE IF NOT EXISTS kv (
@@ -80,14 +82,16 @@ class Storage:
         self._migrar()
 
     def _migrar(self) -> None:
-        if "termos_json" not in {row["name"] for row in self._db.execute("PRAGMA table_info(pedidos)")}:
-            with self._db:
-                self._db.execute("ALTER TABLE pedidos ADD COLUMN termos_json TEXT")
-        colunas = {row["name"] for row in self._db.execute("PRAGMA table_info(avaliacoes)")}
-        for coluna, tipo in (("dados_de", "REAL"), ("chave_produto", "TEXT")):
-            if coluna not in colunas:
-                with self._db:
-                    self._db.execute(f"ALTER TABLE avaliacoes ADD COLUMN {coluna} {tipo}")
+        novas = {
+            "pedidos": (("termos_json", "TEXT"), ("preco_eur", "REAL")),
+            "avaliacoes": (("dados_de", "REAL"), ("chave_produto", "TEXT"), ("preco_eur", "REAL")),
+        }
+        for tabela, colunas_novas in novas.items():
+            colunas = {row["name"] for row in self._db.execute(f"PRAGMA table_info({tabela})")}
+            for coluna, tipo in colunas_novas:
+                if coluna not in colunas:
+                    with self._db:
+                        self._db.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
 
     def close(self) -> None:
         self._db.close()
@@ -95,9 +99,10 @@ class Storage:
     def add_pedido(self, chat_id: int, pedido: Pedido, now: float | None = None, termos: dict | None = None) -> int:
         with self._db:
             cur = self._db.execute(
-                "INSERT INTO pedidos (chat_id, nome, preco_yen, estado, criado_em, termos_json) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO pedidos (chat_id, nome, preco_yen, estado, criado_em, termos_json, preco_eur) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (chat_id, pedido.nome, pedido.preco_yen, pedido.estado, time.time() if now is None else now,
-                 None if termos is None else json.dumps(termos, ensure_ascii=False)),
+                 None if termos is None else json.dumps(termos, ensure_ascii=False), pedido.preco_eur),
             )  # fmt: skip
         return cur.lastrowid
 
@@ -113,14 +118,16 @@ class Storage:
             )
 
     def get_pedido(self, pedido_id: int) -> Pedido | None:
-        row = self._db.execute("SELECT nome, preco_yen, estado FROM pedidos WHERE id = ?", (pedido_id,)).fetchone()
-        return Pedido(row["nome"], row["preco_yen"], row["estado"]) if row else None
+        row = self._db.execute(
+            "SELECT nome, preco_yen, estado, preco_eur FROM pedidos WHERE id = ?", (pedido_id,)
+        ).fetchone()
+        return Pedido(row["nome"], row["preco_yen"], row["estado"], row["preco_eur"]) if row else None
 
     def update_pedido(self, pedido_id: int, pedido: Pedido) -> None:
         with self._db:
             self._db.execute(
-                "UPDATE pedidos SET nome = ?, preco_yen = ?, estado = ? WHERE id = ?",
-                (pedido.nome, pedido.preco_yen, pedido.estado, pedido_id),
+                "UPDATE pedidos SET nome = ?, preco_yen = ?, estado = ?, preco_eur = ? WHERE id = ?",
+                (pedido.nome, pedido.preco_yen, pedido.estado, pedido.preco_eur, pedido_id),
             )
 
     def add_avaliacao(
@@ -131,9 +138,9 @@ class Storage:
         with self._db:
             cur = self._db.execute(
                 "INSERT INTO avaliacoes (chat_id, pedido_id, nome, preco_yen, estado, chave, mercado_json, veredicto, "
-                "da_cache, criado_em, dados_de, chave_produto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "da_cache, criado_em, dados_de, chave_produto, preco_eur) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (chat_id, pedido_id, pedido.nome, pedido.preco_yen, pedido.estado, chave, mercado_json, veredicto,
-                 int(da_cache), now, now if dados_de is None else dados_de, chave_produto),
+                 int(da_cache), now, now if dados_de is None else dados_de, chave_produto, pedido.preco_eur),
             )  # fmt: skip
         return cur.lastrowid
 
@@ -143,7 +150,7 @@ class Storage:
             return None
         return Avaliacao(
             pedido_id=row["pedido_id"],
-            pedido=Pedido(row["nome"], row["preco_yen"], row["estado"]),
+            pedido=Pedido(row["nome"], row["preco_yen"], row["estado"], row["preco_eur"]),
             mercado_json=row["mercado_json"],
             da_cache=bool(row["da_cache"]),
             dados_de=row["dados_de"] if row["dados_de"] is not None else row["criado_em"],
@@ -175,7 +182,7 @@ class Storage:
 
     def ultimas_avaliacoes(self, n: int) -> list[sqlite3.Row]:
         return self._db.execute(
-            "SELECT nome, preco_yen, estado, veredicto, da_cache, criado_em FROM avaliacoes "
+            "SELECT nome, preco_yen, preco_eur, estado, veredicto, da_cache, criado_em FROM avaliacoes "
             "ORDER BY criado_em DESC, id DESC LIMIT ?",
             (n,),
         ).fetchall()

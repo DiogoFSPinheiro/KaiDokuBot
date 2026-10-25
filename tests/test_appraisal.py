@@ -257,3 +257,26 @@ async def test_pedido_de_foto_salta_a_identificacao(storage):
     assert [tipo for tipo, _, _ in runner.chamadas] == ["mercado"]
     assert "🔍 Nendoroid Frieren 2367" in r.texto
     assert "📷 Produto identificado pela foto" in progresso
+
+
+
+async def test_avaliacao_em_euros_sem_japao(storage):
+    storage.add_pedido(1, Pedido("nendoroid frieren", 0, "selado", 45.0))
+    runner = FakeRunner({"termos": TERMOS, "mercado": MERCADO})
+    mercari = FakeMercari([Anuncio("x", 4200, "novo")])
+    r = await _avaliador(storage, runner, mercari=mercari).avaliar(1, 2, False, lambda _: None)
+    assert mercari.termos == []  # sem Mercari
+    _, prompt, _ = runner.chamadas[-1]
+    assert "Mercari" not in prompt and "€45.00" in prompt and "Portugal" in prompt
+    assert r.texto.startswith("🟢 <b>Bom preço</b>")
+    assert "🇯🇵" not in r.texto
+
+
+async def test_cache_separada_por_moeda(storage):
+    runner = FakeRunner({"termos": TERMOS, "mercado": MERCADO})
+    avaliador = _avaliador(storage, runner)
+    await avaliador.avaliar(1, 1, False, lambda _: None)
+    storage.add_pedido(1, Pedido("nendoroid frieren", 0, "selado", 45.0))
+    r = await avaliador.avaliar(1, 2, False, lambda _: None)
+    assert len(runner.chamadas) == 4  # não reutilizou a avaliação japonesa
+    assert "🕒" not in r.texto

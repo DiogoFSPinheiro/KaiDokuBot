@@ -87,3 +87,41 @@ def test_medidas_e_escalas_nao_sao_preco(texto):
 def test_numero_pequeno_e_falta_de_preco():
     with pytest.raises(ParseError, match="Falta o preço"):
         parse_pedido("Xenoblade Chronicles: Definitive Edition switch 2")
+
+
+
+@pytest.mark.parametrize(
+    "texto, esperado",
+    [
+        ("nendoroid frieren 29,99€", Pedido("nendoroid frieren", 0, "desconhecido", 29.99)),
+        ("nendoroid frieren €29.99 usado", Pedido("nendoroid frieren", 0, "usado", 29.99)),
+        ("zelda totk 45 eur", Pedido("zelda totk", 0, "desconhecido", 45.0)),
+        ("ps5 slim 1.299€", Pedido("ps5 slim", 0, "desconhecido", 1299.0)),
+        ("pop up parade fern 30 euros selado", Pedido("pop up parade fern", 0, "selado", 30.0)),
+        ("nendoroid 2367 35€", Pedido("nendoroid 2367", 0, "desconhecido", 35.0)),
+    ],
+)
+def test_preco_em_euros(texto, esperado):
+    pedido = parse_pedido(texto)
+    assert pedido == esperado
+    assert pedido.em_euros
+
+
+def test_sem_moeda_continua_em_ienes():
+    pedido = parse_pedido("nendoroid frieren 4800")
+    assert (pedido.preco_yen, pedido.preco_eur, pedido.em_euros) == (4800, None, False)
+
+
+@pytest.mark.parametrize("texto", ["figura 0€", "figura 200000€"])
+def test_euros_fora_de_limites(texto):
+    with pytest.raises(ParseError, match="preço"):
+        parse_pedido(texto)
+
+
+def test_parse_preco_moeda():
+    from kaidokubot.parsing import parse_preco_moeda
+
+    assert parse_preco_moeda("29,99 €") == (29.99, "EUR")
+    assert parse_preco_moeda("¥3.980") == (3980, "JPY")
+    assert parse_preco_moeda("5200") == (5200, "JPY")
+    assert parse_preco_moeda("nada") is None

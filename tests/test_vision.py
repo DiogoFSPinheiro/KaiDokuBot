@@ -56,3 +56,15 @@ async def test_ler_foto_passa_a_imagem_ao_claude_sem_ferramentas():
     leitura = await ler_foto(runner, b"img", "image/png", "4500")
     assert runner.chamadas == [("foto", "", b"img", "image/png")]
     assert isinstance(leitura, Leitura) and leitura.preco_yen == 4500
+
+
+
+def test_jogo_sem_personagem_usa_o_titulo():
+    dados = {**DADOS, "nome": "Xenoblade Chronicles 2 Torna", "fabricante": "Nintendo", "linha": "Nintendo Switch",
+             "personagem": "", "referencia": ""}  # fmt: skip
+    assert leitura_de(dados, None).termos["personagem"] == "Xenoblade Chronicles 2 Torna"
+
+
+def test_legenda_em_euros():
+    leitura = leitura_de(DADOS, "30€")
+    assert (leitura.preco_yen, leitura.preco_eur) == (None, 30.0)

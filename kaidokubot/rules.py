@@ -24,7 +24,9 @@ PORTES_VINTED_EUR = 4.0
 
 MIN_COMPARAVEIS_JP = 3
 MIN_COMPARAVEIS_VINTED = 2
-MIN_VENDIDOS_VEREDICTO_JP = 2  # sem preços europeus, o veredicto vem do Mercari
+MIN_VENDIDOS_VEREDICTO_JP = 2
+# Modo Europa (preço em €): ±10% da alternativa mais barata é «preço normal».
+MARGEM_EUROPA_PCT = 10  # sem preços europeus, o veredicto vem do Mercari
 
 
 @dataclass(frozen=True)
@@ -111,13 +113,14 @@ class Mercado:
 
 @dataclass(frozen=True)
 class Veredicto:
-    codigo: str  # compensa | pouca | nao | incerto; sem Europa: jp_bom | jp_normal | jp_caro
+    codigo: str  # compensa | pouca | nao | incerto; sem Europa: jp_bom | jp_normal | jp_caro; em €: eu_bom | eu_normal | eu_caro
     melhor: tuple[str, float] | None  # alternativa europeia mais barata (rótulo, €)
     poupanca_eur: float | None
     poupanca_pct: float | None
     max_montra_yen: int | None  # preço de montra a partir do qual deixa de compensar
     caro_no_japao: bool
     motivo: str | None = None  # só para "incerto"
+    max_eur: float | None = None  # modo Europa: o preço da alternativa mais barata
 
 
 def loja_curta(nome: str | None) -> str | None:
@@ -128,14 +131,15 @@ def loja_curta(nome: str | None) -> str | None:
     return (curto[:24] + "…" if len(curto) > 25 else curto) or None
 
 
-def alternativas(m: Mercado, taxa: float) -> list[tuple[str, float]]:
+def alternativas(m: Mercado, taxa: float | None) -> list[tuple[str, float]]:
+    """Alternativas europeias (rótulo, €); sem câmbio não entra a importação do Japão."""
     opcoes = []
     if m.novo_eu_eur:
         loja = loja_curta(m.novo_eu_loja)
         opcoes.append((f"novo ({loja})" if loja else "novo", m.novo_eu_eur))
     if m.vinted_eur and m.vinted_n >= MIN_COMPARAVEIS_VINTED:
         opcoes.append(("Vinted", m.vinted_eur + PORTES_VINTED_EUR))
-    if m.importar_yen:
+    if m.importar_yen and taxa is not None:
         loja = loja_curta(m.importar_loja)
         rotulo = f"importar ({loja})" if loja else "importar"
         opcoes.append((rotulo, importar_total_eur(m.importar_yen, taxa)))
@@ -170,3 +174,20 @@ def calcular_veredicto(m: Mercado, c: Contas, taxa: float | None, margem_pct: in
     max_montra = math.floor(liquido_max_yen * (1 + IMPOSTO) / (1 - COMISSAO_REEMBOLSO) / 100) * 100
     codigo = "compensa" if pct >= margem_pct else "pouca" if poupanca >= 0 else "nao"
     return Veredicto(codigo, melhor, poupanca, pct, max_montra, caro)
+
+
+def calcular_veredicto_eur(m: Mercado, preco_eur: float) -> Veredicto:
+    """Modo Europa (em Portugal): o preço face à alternativa europeia mais barata, sem Japão."""
+    opcoes = alternativas(m, None)
+    if not opcoes:
+        return Veredicto("incerto", None, None, None, None, False, "sem preços europeus fiáveis")
+    melhor = min(opcoes, key=lambda opcao: opcao[1])
+    poupanca = melhor[1] - preco_eur
+    pct = poupanca / melhor[1] * 100
+    if pct >= MARGEM_EUROPA_PCT:
+        codigo = "eu_bom"
+    elif pct <= -MARGEM_EUROPA_PCT:
+        codigo = "eu_caro"
+    else:
+        codigo = "eu_normal"
+    return Veredicto(codigo, melhor, poupanca, pct, None, False, max_eur=melhor[1])
