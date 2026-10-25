@@ -52,6 +52,7 @@ SCHEMA_MERCADO = {
         "novo_eu_loja": {**_S, "description": "Só o nome da loja, 1–3 palavras (ex.: Amazon.es)"},
         "vinted_min_eur": {**_N, "description": "Intervalo típico dos anúncios comparáveis da Vinted, mesmo estado"},
         "vinted_max_eur": _N,
+        "vinted_tipico_eur": {**_N, "description": "Mediana dos anúncios comparáveis da Vinted, mesmo estado"},
         "vinted_n": {"type": "integer", "description": "Quantos anúncios da Vinted são comparáveis"},
         "importar_yen": {**_N, "description": "Preço numa loja online japonesa que envie para a Europa"},
         "importar_loja": {**_S, "description": "Só o nome da loja, 1–3 palavras (ex.: AmiAmi)"},
@@ -80,7 +81,7 @@ SCHEMA_MERCADO = {
         },
     },
     "required": [
-        "novo_eu_eur", "novo_eu_loja", "vinted_min_eur", "vinted_max_eur", "vinted_n", "importar_yen",
+        "novo_eu_eur", "novo_eu_loja", "vinted_min_eur", "vinted_max_eur", "vinted_tipico_eur", "vinted_n", "importar_yen",
         "importar_loja", "jp_min_yen", "jp_max_yen", "jp_n", "jp_so_pedidos", "cenarios", "razao", "fontes",
     ],
 }  # fmt: skip
@@ -124,7 +125,8 @@ def prompt_mercado(
         "peças soltas, outro estado): ignora-os.",
         "1. Mercari: intervalo típico (¥) dos VENDIDOS comparáveis no mesmo estado (jp_min_yen, jp_max_yen, jp_n). "
         "Se não houver vendidos comparáveis, usa os à venda e jp_so_pedidos=true.",
-        "2. Vinted: intervalo típico (€) dos anúncios comparáveis no mesmo estado (vinted_min_eur, vinted_max_eur, vinted_n).",
+        "2. Vinted: intervalo típico (€) dos anúncios comparáveis no mesmo estado (vinted_min_eur, vinted_max_eur, "
+        "vinted_n) e a mediana desses anúncios (vinted_tipico_eur).",
         "3. Pesquisar na web é obrigatório (2 a 5 pesquisas, em inglês e japonês): o preço novo mais baixo numa "
         "loja europeia que envie para Portugal (ex.: Amazon.es/.de/.fr, Fnac, JapanDco, Nin-Nin-Game, Figurine "
         "Universe; para jogos e consolas também KuantoKusta e Worten) e o preço numa loja online japonesa que envie "
@@ -155,6 +157,7 @@ def mercado_de(dados: dict, termos: dict, avisos: list[str]) -> Mercado:
             novo_eu_loja=dados.get("novo_eu_loja") or None,
             vinted_min_eur=_numero(dados["vinted_min_eur"]),
             vinted_max_eur=_numero(dados["vinted_max_eur"]),
+            vinted_tipico_eur=_numero(dados.get("vinted_tipico_eur")),
             vinted_n=int(dados.get("vinted_n") or 0),
             importar_yen=_numero(dados["importar_yen"]),
             importar_loja=dados.get("importar_loja") or None,

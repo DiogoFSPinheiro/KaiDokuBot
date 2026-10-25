@@ -13,7 +13,11 @@ PRECO_MAX = 10_000_000
 _PALAVRAS = {
     "selado": ["selado", "selada", "sealed", "misb", "nib", "新品未開封", "未開封"],
     "novo": ["novo", "nova", "new", "新品", "未使用"],
-    "usado": ["usado", "usada", "used", "aberto", "aberta", "opened", "中古", "開封済み", "開封済", "開封品", "開封"],
+    "usado": [
+        "usado", "usada", "used", "aberto", "aberta", "opened", "中古", "開封済み", "開封済", "開封品", "開封",
+        # "caixa ok" numa loja de usados = usado e completo
+        "caixa ok", "com caixa", "completo", "completa", "complete", "boxed", "box ok", "箱あり", "箱付き",
+    ],
     "sem caixa": ["sem caixa", "no box", "loose", "箱なし", "箱無し", "本体のみ"],
     "caixa danificada": [
         "caixa danificada", "caixa estragada", "damaged box", "box damage", "box damaged",

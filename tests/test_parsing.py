@@ -16,6 +16,8 @@ from kaidokubot.parsing import ParseError, Pedido, parse_estado, parse_pedido, p
         ("figura ￥4,800 箱傷み 中古", Pedido("figura", 4800, "caixa danificada")),
         ("Peluche Chiikawa 1.200 NOVO", Pedido("Peluche Chiikawa", 1200, "novo")),
         ("Pokémon Scarlet 4,980 JPY caixa danificada", Pedido("Pokémon Scarlet", 4980, "caixa danificada")),
+        ("nezuko nedoroid 5000 yen caixa ok", Pedido("nezuko nedoroid", 5000, "usado")),
+        ("figura 3000 com caixa", Pedido("figura", 3000, "usado")),
     ],
 )
 def test_parse_pedido(texto, esperado):

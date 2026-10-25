@@ -18,6 +18,8 @@ COMISSAO_REEMBOLSO = 0.0
 IVA_PT = 0.23
 PORTES_IMPORTACAO_EUR = 15.0  # envio de uma figura / jogo (SAL / EMS), estimativa
 TAXA_CTT_EUR = 2.65  # ~€2,15 + IVA
+# Portes de um artigo comprado na Vinted (envio nacional / ponto de recolha), estimativa.
+PORTES_VINTED_EUR = 4.0
 # --------------------------------------------------------------------------------------------
 
 
@@ -77,6 +79,16 @@ class Mercado:
     razao: str = ""
     fontes: list[dict] = field(default_factory=list)  # {nome, url}
     avisos: list[str] = field(default_factory=list)
+    vinted_tipico_eur: float | None = None  # mediana dos comparáveis (o mínimo costuma ser um outlier)
+
+    @property
+    def vinted_eur(self) -> float | None:
+        """Preço típico na Vinted, sem portes."""
+        if self.vinted_tipico_eur:
+            return self.vinted_tipico_eur
+        if self.vinted_min_eur and self.vinted_max_eur:
+            return (self.vinted_min_eur + self.vinted_max_eur) / 2
+        return self.vinted_min_eur or self.vinted_max_eur
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -110,8 +122,8 @@ def alternativas(m: Mercado, taxa: float) -> list[tuple[str, float]]:
     if m.novo_eu_eur:
         loja = loja_curta(m.novo_eu_loja)
         opcoes.append((f"novo ({loja})" if loja else "novo", m.novo_eu_eur))
-    if m.vinted_min_eur:
-        opcoes.append(("Vinted", m.vinted_min_eur))
+    if m.vinted_eur:
+        opcoes.append(("Vinted", m.vinted_eur + PORTES_VINTED_EUR))
     if m.importar_yen:
         loja = loja_curta(m.importar_loja)
         rotulo = f"importar ({loja})" if loja else "importar"

@@ -83,7 +83,7 @@ def _linha_veredicto(v: Veredicto) -> str:
     cabecalho = _CABECALHO[v.codigo]
     if v.codigo == "incerto" or v.melhor is None or v.poupanca_eur is None:
         return f"{cabecalho} — {escape(v.motivo or '')}"
-    rotulo = escape(v.melhor[0])
+    rotulo = f"{escape(v.melhor[0])} ({fmt_eur(v.melhor[1])})"
     if v.codigo == "nao":
         return f"{cabecalho} — {fmt_eur(-v.poupanca_eur)} mais caro que {rotulo}"
     return f"{cabecalho} — poupas {fmt_eur(v.poupanca_eur)} ({round(v.poupanca_pct)}%) face a {rotulo}"
@@ -94,9 +94,10 @@ def _linha_europa(m: Mercado, taxa: float | None) -> str | None:
     if m.novo_eu_eur:
         loja = f" ({escape(loja_curta(m.novo_eu_loja))})" if loja_curta(m.novo_eu_loja) else ""
         partes.append(f"Novo {fmt_eur(m.novo_eu_eur)}{loja}")
-    vinted = _intervalo(m.vinted_min_eur, m.vinted_max_eur, fmt_eur)
-    if vinted:
-        partes.append(f"Vinted {vinted} ({m.vinted_n})")
+    if m.vinted_eur:
+        intervalo = _intervalo(m.vinted_min_eur, m.vinted_max_eur, fmt_eur)
+        detalhe = f"{intervalo}, {m.vinted_n}" if intervalo and "–" in intervalo else str(m.vinted_n)
+        partes.append(f"Vinted ~{fmt_eur(m.vinted_eur)} + portes ({detalhe})")
     if m.importar_yen and taxa is not None:
         loja = f" ({escape(loja_curta(m.importar_loja))})" if loja_curta(m.importar_loja) else ""
         partes.append(f"importar ~{fmt_eur(importar_total_eur(m.importar_yen, taxa))}{loja}")

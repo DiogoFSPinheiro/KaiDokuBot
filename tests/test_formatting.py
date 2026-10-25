@@ -57,9 +57,9 @@ def test_resultado_completo():
     m = _mercado(fontes=[{"nome": "JapanDco", "url": "https://j.example/x"}, {"nome": "Vinted <pt>", "url": "https://v"}])
     assert _resultado(m).splitlines() == [
         "📦 <b>nendoroid frieren</b> · ¥4.800 → €24.86 após reembolso",
-        "🟢 <b>Compensa</b> — poupas €20.14 (45%) face a Vinted",
-        "💴 Pagaria no máximo ¥6.900",
-        "🇪🇺 Novo €54.90 (JapanDco) · Vinted €45.00–65.00 (12) · importar ~€62.51 (AmiAmi)",
+        "🟢 <b>Compensa</b> — poupas €29.14 (54%) face a Vinted (€54.00)",
+        "💴 Pagaria no máximo ¥8.300",
+        "🇪🇺 Novo €54.90 (JapanDco) · Vinted ~€50.00 + portes (€45.00–65.00, 12) · importar ~€62.51 (AmiAmi)",
         "🇯🇵 Mercari vendidos ¥3.900–4.500 (8)",
         "👀 Acima do normal no Japão — vê noutras lojas",
         "Razão.",
@@ -68,17 +68,18 @@ def test_resultado_completo():
 
 
 def test_resultado_nao_compensa_e_so_pedidos():
-    m = _mercado(vinted_min_eur=20.0, vinted_max_eur=None, novo_eu_eur=None, importar_yen=None,
+    m = _mercado(vinted_min_eur=16.0, vinted_max_eur=None, vinted_tipico_eur=16.0, novo_eu_eur=None, importar_yen=None,
                  jp_so_pedidos=True, jp_max_yen=6000.0, avisos=["Vinted indisponível"])  # fmt: skip
     linhas = _resultado(m).splitlines()
-    assert linhas[1] == "🔴 <b>Não compensa</b> — €4.86 mais caro que Vinted"
-    assert "🇪🇺 Vinted €20.00 (12)" in linhas
+    assert linhas[1] == "🔴 <b>Não compensa</b> — €4.86 mais caro que Vinted (€20.00)"
+    assert "🇪🇺 Vinted ~€16.00 + portes (12)" in linhas
     assert "🇯🇵 Mercari à venda ¥3.900–6.000 (só anúncios, sem vendas)" in linhas
     assert "⚠️ Vinted indisponível" in linhas
 
 
 def test_resultado_incerto():
-    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_n=0, importar_yen=None,
+    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None, vinted_n=0,
+                 importar_yen=None,
                  jp_min_yen=None, jp_max_yen=None, jp_n=0)  # fmt: skip
     linhas = _resultado(m).splitlines()
     assert linhas[1] == "⚪ <b>Incerto</b> — sem preços europeus fiáveis"
@@ -102,6 +103,6 @@ def test_resultado_da_cache():
 
 def test_nome_da_loja_longo_e_cortado():
     m = _mercado(novo_eu_loja="Amazon (promoção reportada em junho de 2026; PVP €69,99)", importar_yen=None,
-                 vinted_min_eur=None, vinted_max_eur=None)  # fmt: skip
+                 vinted_min_eur=None, vinted_max_eur=None, vinted_tipico_eur=None)  # fmt: skip
     linha = next(l for l in _resultado(m).splitlines() if l.startswith("🇪🇺"))
     assert linha == "🇪🇺 Novo €54.90 (Amazon)"
