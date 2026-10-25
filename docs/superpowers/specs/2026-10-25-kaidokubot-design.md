@@ -127,6 +127,7 @@ Fontes: Amazon.es · Vinted · Mercari
 - Testado (fase 0): imagem em base64 num bloco `image` via `--input-format stream-json --output-format stream-json --verbose --tools ""` + `--json-schema`; ~4 s, sem acesso a ficheiros. Leu corretamente uma etiqueta japonesa desfocada (nome, ¥4.800, 箱傷み → caixa danificada), sem confundir o número da Nendoroid com o preço.
 - Usa a maior resolução que o Telegram envia. A legenda (opcional) tem prioridade: se tiver preço ou estado, esses valores ganham aos lidos na imagem.
 - Devolve nome (pt/en), termo japonês, preço, estado, confiança; mostra "📷 Percebi: …" com «💡 Avaliar» e «✏️ Corrigir». Confiança baixa ou sem preço → pede correção.
+- **Só as fotos pedem confirmação** (decisão do utilizador, 25/10): a leitura da etiqueta pode falhar, por isso a avaliação só arranca quando carrego em «💡 Avaliar» (ou depois de corrigir). O texto é escrito por mim e avalia logo (`AUTO_AVALIAR=1`).
 
 ## 7. Histórico e comandos (fase 4)
 - Cada avaliação fica no SQLite; `/historico` mostra as últimas 10: data, nome, preço, veredicto.
