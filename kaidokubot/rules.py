@@ -23,6 +23,7 @@ PORTES_VINTED_EUR = 4.0
 # --------------------------------------------------------------------------------------------
 
 MIN_COMPARAVEIS_JP = 3
+MIN_COMPARAVEIS_VINTED = 2
 
 
 @dataclass(frozen=True)
@@ -125,7 +126,7 @@ def alternativas(m: Mercado, taxa: float) -> list[tuple[str, float]]:
     if m.novo_eu_eur:
         loja = loja_curta(m.novo_eu_loja)
         opcoes.append((f"novo ({loja})" if loja else "novo", m.novo_eu_eur))
-    if m.vinted_eur:
+    if m.vinted_eur and m.vinted_n >= MIN_COMPARAVEIS_VINTED:
         opcoes.append(("Vinted", m.vinted_eur + PORTES_VINTED_EUR))
     if m.importar_yen:
         loja = loja_curta(m.importar_loja)

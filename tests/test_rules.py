@@ -107,3 +107,9 @@ def test_cache_antiga_sem_tipico_continua_a_ler():
 def test_caro_no_japao_exige_pelo_menos_3_comparaveis():
     assert calcular_veredicto(_mercado(jp_n=2), contas(4800, TAXA), TAXA, 20).caro_no_japao is False
     assert calcular_veredicto(_mercado(jp_n=3), contas(4800, TAXA), TAXA, 20).caro_no_japao is True
+
+
+def test_vinted_com_um_so_anuncio_nao_entra_no_veredicto():
+    m = _mercado(vinted_n=1, novo_eu_eur=None, importar_yen=None)
+    v = calcular_veredicto(m, contas(4800, TAXA), TAXA, 20)
+    assert (v.codigo, v.motivo) == ("incerto", "sem preços europeus fiáveis")

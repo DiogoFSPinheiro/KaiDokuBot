@@ -178,7 +178,7 @@ def resumo(
         lines.append(f"💴 Máximo {fmt_yen(v.max_montra_yen)}")
     europa = []
     if m.vinted_eur:
-        europa.append(f"Vinted ~{_eur0(m.vinted_eur)}")
+        europa.append(f"Vinted ~{_eur0(m.vinted_eur)} ({m.vinted_n})")
     if m.novo_eu_eur:
         loja = loja_curta(m.novo_eu_loja)
         europa.append(f"novo {_eur0(m.novo_eu_eur)}" + (f" ({escape(loja)})" if loja else ""))

@@ -120,7 +120,7 @@ def test_resumo_compacto():
     assert _resumo(_mercado()).splitlines() == [
         "🟢 <b>Compensa</b> · poupas €29 (54%)",
         "💴 Máximo ¥8.300",
-        "🇪🇺 Vinted ~€50 · novo €55 (JapanDco) · importar ~€63",
+        "🇪🇺 Vinted ~€50 (12) · novo €55 (JapanDco) · importar ~€63",
         "🇯🇵 Mercari ¥3.900–4.500 (8) · 👀 caro aqui",
         "🔍 Nendoroid 2367 Frieren",
     ]
@@ -136,7 +136,7 @@ def test_resumo_nao_compensa_sem_japao_com_avisos_e_cache():
     assert _resumo(m, criado_em=1_000_000.0 - 2 * 86400).splitlines() == [
         "🔴 <b>Não compensa</b> · €5 mais caro que na Europa",
         "💴 Máximo ¥3.000",
-        "🇪🇺 Vinted ~€16",
+        "🇪🇺 Vinted ~€16 (12)",
         "⚠️ Mercari indisponível",
         "🕒 avaliado há 2 dias",
     ]
@@ -149,3 +149,8 @@ def test_resumo_incerto_e_so_pedidos():
         "⚪ <b>Incerto</b> · sem preços europeus fiáveis",
         "🇯🇵 Mercari à venda ¥3.900–4.900 (8)",
     ]
+
+
+def test_resumo_mostra_quantos_anuncios_da_vinted():
+    m = _mercado(vinted_n=1, novo_eu_eur=None, importar_yen=None, produto="")
+    assert "🇪🇺 Vinted ~€50 (1)" in _resumo(m).splitlines()

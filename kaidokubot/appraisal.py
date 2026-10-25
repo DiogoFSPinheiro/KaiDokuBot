@@ -130,8 +130,8 @@ def prompt_mercado(
         "",
         "Só contam anúncios do MESMO produto (mesmo fabricante, linha e tamanho). Ignora outros artigos ou "
         "personagens, minis/さぷらいず, lotes, peças soltas, outro estado e, se o artigo não for uma, figuras de "
-        "prémio (SEGA, Taito, FuRyu, Banpresto, 一番くじ, GiGO). Com menos de 3 comparáveis numa fonte, usa null "
-        "nessa fonte em vez de comparar com outra coisa.",
+        "prémio (SEGA, Taito, FuRyu, Banpresto, 一番くじ, GiGO). Dá os intervalos mesmo com 1 ou 2 comparáveis "
+        "(o n diz quão fiável é); null só se não houver nenhum anúncio do mesmo produto.",
         "1. Mercari: intervalo típico (¥) dos VENDIDOS comparáveis no mesmo estado (jp_min_yen, jp_max_yen, jp_n). "
         "Se não houver vendidos comparáveis, usa os à venda e jp_so_pedidos=true.",
         "2. Vinted: intervalo típico (€) dos anúncios comparáveis no mesmo estado (vinted_min_eur, vinted_max_eur, "
@@ -209,7 +209,7 @@ class Avaliador:
         if pedido is None:
             return Resposta(NAO_EXISTE)
         chave = chave_cache(pedido.nome, pedido.estado)
-        if not forcar and (cache := self._da_cache(chave)):
+        if not forcar and (cache := self._da_cache(self._storage.cache, chave)):
             return self._registar(chat_id, pedido_id, pedido, chave, *cache, da_cache=True)
         if self._storage.contar_avaliacoes(inicio_do_dia_tokyo(self._now())) >= self._max_dia:
             plural = "avaliação" if self._max_dia == 1 else "avaliações"
@@ -224,9 +224,19 @@ class Avaliador:
                 progresso(f"⏳ Na fila (posição {posicao})…")
             async with self._lock:
                 # Enquanto esperava, outro pedido pode ter avaliado o mesmo artigo.
-                if not forcar and (cache := self._da_cache(chave)):
+                if not forcar and (cache := self._da_cache(self._storage.cache, chave)):
                     return self._registar(chat_id, pedido_id, pedido, chave, *cache, da_cache=True)
-                mercado = await self._pesquisar(pedido, progresso)
+                termos = await self._identificar(pedido, progresso)
+                chave_produto = None
+                if termos.get("produto"):
+                    chave_produto = chave_cache(f"produto:{termos['produto']}", pedido.estado)
+                # O mesmo produto pode já ter sido avaliado com outro texto.
+                cache = self._da_cache(self._storage.cache_produto, chave_produto) if chave_produto else None
+                if not forcar and cache:
+                    return self._registar(
+                        chat_id, pedido_id, pedido, chave, *cache, da_cache=True, chave_produto=chave_produto
+                    )
+                mercado = await self._pesquisar(pedido, termos, progresso)
         except ClaudeError as exc:
             return Resposta(f"❌ Não consegui avaliar: {exc}", [[("💡 Tentar outra vez", f"av:{pedido_id}")]])
         except Exception:
@@ -236,10 +246,12 @@ class Avaliador:
             )
         finally:
             self._na_fila -= 1
-        return self._registar(chat_id, pedido_id, pedido, chave, mercado, None, da_cache=False)
+        return self._registar(
+            chat_id, pedido_id, pedido, chave, mercado, None, da_cache=False, chave_produto=chave_produto
+        )
 
-    def _da_cache(self, chave: str) -> tuple[Mercado, float] | None:
-        encontrado = self._storage.cache(chave, desde=self._now() - self._cache_s)
+    def _da_cache(self, procurar, chave: str) -> tuple[Mercado, float] | None:
+        encontrado = procurar(chave, desde=self._now() - self._cache_s)
         if encontrado is None:
             return None
         mercado_json, criado_em = encontrado
@@ -251,7 +263,7 @@ class Avaliador:
 
     def _registar(
         self, chat_id: int, pedido_id: int, pedido: Pedido, chave: str, mercado: Mercado, dados_de: float | None,
-        *, da_cache: bool,
+        *, da_cache: bool, chave_produto: str | None = None,
     ) -> Resposta:  # fmt: skip
         """Guarda a avaliação no histórico e devolve o resumo. dados_de: quando os dados foram recolhidos (cache)."""
         taxa = self._cambio.taxa()
@@ -259,7 +271,7 @@ class Avaliador:
         mercado_json = json.dumps(mercado.to_dict(), ensure_ascii=False)
         avaliacao_id = self._storage.add_avaliacao(
             chat_id, pedido_id, pedido, chave, mercado_json, veredicto.codigo, da_cache,
-            dados_de=dados_de, now=self._now(),
+            dados_de=dados_de, chave_produto=chave_produto, now=self._now(),
         )  # fmt: skip
         return self.mostrar(avaliacao_id, detalhes=False)
 
@@ -283,14 +295,17 @@ class Avaliador:
         texto = resumo(c, mercado, veredicto, recolhido, agora, estado=pedido.estado)
         return Resposta(texto, [[("📋 Detalhes", f"det:{avaliacao_id}"), *acoes]], pedido_id)
 
-    async def _pesquisar(self, pedido: Pedido, progresso: Callable[[str], None]) -> Mercado:
-        progresso("🈂️ A preparar a pesquisa…")
+    async def _identificar(self, pedido: Pedido, progresso: Callable[[str], None]) -> dict:
+        progresso("🈂️ A identificar o produto…")
         termos = await self._runner.run(
             prompt_termos(pedido), SCHEMA_TERMOS, system=SYSTEM_TERMOS, tools="WebSearch",
             on_search=lambda query: progresso(f"🔍 A identificar: {query}"),
         )  # fmt: skip
         if not termos.get("termo_jp") or not termos.get("termo_en"):
             raise ClaudeError("resposta incompleta do Claude")
+        return termos
+
+    async def _pesquisar(self, pedido: Pedido, termos: dict, progresso: Callable[[str], None]) -> Mercado:
         progresso(f"🔎 A procurar no Mercari ({termos['termo_jp']}) e na Vinted ({termos['termo_en']})…")
         mercari, vinted = await asyncio.gather(
             self._mercari.procurar(termos["termo_jp"]), self._vinted.procurar(termos["termo_en"]),

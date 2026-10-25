@@ -73,7 +73,7 @@ def test_cache_devolve_o_mais_recente_dentro_do_prazo():
     storage = Storage()
     _avaliar(storage, "k", 100.0, mercado='{"v": 1}')
     _avaliar(storage, "k", 200.0, mercado='{"v": 2}')
-    _avaliar(storage, "k", 300.0, da_cache=True, mercado='{"v": 3}')
+    _avaliar(storage, "k", 300.0, da_cache=True, mercado='{"v": 2}', dados_de=200.0)  # resposta da cache
     assert storage.cache("k", desde=50.0) == ('{"v": 2}', 200.0)
     assert storage.cache("k", desde=250.0) is None
     assert storage.cache("outra", desde=0.0) is None
@@ -127,3 +127,15 @@ def test_migra_tabela_antiga_sem_dados_de(tmp_path):
     storage = Storage(path)
     aval_id = _avaliar(storage, "k", 5.0, dados_de=1.0)
     assert storage.get_avaliacao(aval_id).dados_de == 1.0
+
+
+
+def test_chave_cache_tem_versao():
+    assert chave_cache("x", "usado").startswith("v2|")
+
+
+def test_cache_por_produto():
+    storage = Storage()
+    storage.add_avaliacao(1, 1, PEDIDO, "k1", '{"v": 1}', "compensa", False, chave_produto="p", now=100.0)
+    assert storage.cache_produto("p", desde=50.0) == ('{"v": 1}', 100.0)
+    assert storage.cache_produto("outro", desde=0.0) is None

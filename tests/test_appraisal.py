@@ -182,3 +182,19 @@ async def test_cache_guarda_quando_os_dados_foram_recolhidos(storage):
     await avaliador.avaliar(1, 1, False, lambda _: None)  # da cache -> avaliação 2
     clock.now += 86400
     assert avaliador.mostrar(2, detalhes=False).texto.splitlines()[-1] == "🕒 avaliado há 3 dias"
+
+
+
+async def test_cache_pelo_produto_identificado(storage):
+    clock = FakeClock()
+    runner = FakeRunner({"termos": TERMOS, "mercado": MERCADO})
+    avaliador = _avaliador(storage, runner, clock=clock)
+    await avaliador.avaliar(1, 1, False, lambda _: None)
+    storage.add_pedido(1, Pedido("frieren nendo 2367", 4800, "selado"))  # outro texto, mesmo produto
+    clock.now += 3600
+    r = await avaliador.avaliar(1, 2, False, lambda _: None)
+    assert [tipo for tipo, _, _ in runner.chamadas] == ["termos", "mercado", "termos"]
+    assert "🕒 avaliado há 1 h" in r.texto
+    # E da próxima vez o texto novo já acerta logo na cache, sem identificar.
+    await avaliador.avaliar(1, 2, False, lambda _: None)
+    assert len(runner.chamadas) == 3
