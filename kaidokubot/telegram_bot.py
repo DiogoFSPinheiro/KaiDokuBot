@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
+from telegram.error import BadRequest, RetryAfter
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
+from kaidokubot.appraisal import Avaliador
 from kaidokubot.commands import Commands, Resposta
 from kaidokubot.config import Settings
 from kaidokubot.formatting import HELP
@@ -26,13 +28,59 @@ def markup(r: Resposta) -> InlineKeyboardMarkup | None:
     )
 
 
-def build_application(settings: Settings, storage: Storage, cambio: Cambio, http) -> Application:
+class Progresso:
+    """Mensagem de progresso: mostra sempre o texto mais recente, com no máximo uma edição a cada `intervalo_s`."""
+
+    def __init__(self, mensagem, intervalo_s: float = 3.0) -> None:
+        self._mensagem = mensagem
+        self._intervalo_s = intervalo_s
+        self._texto: str | None = None
+        self._mostrado: str | None = None
+        self._ultima = float("-inf")
+        self._tarefa: asyncio.Task | None = None
+        self._fechado = False
+
+    def __call__(self, texto: str) -> None:
+        if self._fechado:
+            return
+        self._texto = texto
+        if self._tarefa is None or self._tarefa.done():
+            self._tarefa = asyncio.create_task(self._atualizar())
+
+    async def _atualizar(self) -> None:
+        loop = asyncio.get_running_loop()
+        while self._texto != self._mostrado:
+            espera = self._ultima + self._intervalo_s - loop.time()
+            if espera > 0:
+                await asyncio.sleep(espera)
+            texto = self._texto
+            try:
+                await self._mensagem.edit_text(texto)
+            except (BadRequest, RetryAfter) as exc:
+                log.debug("Progresso não atualizado: %s", exc)
+            self._mostrado = texto
+            self._ultima = loop.time()
+
+    async def fechar(self) -> None:
+        self._fechado = True
+        if self._tarefa is not None and not self._tarefa.done():
+            self._tarefa.cancel()
+            try:
+                await self._tarefa
+            except asyncio.CancelledError:
+                pass
+
+
+def build_application(
+    settings: Settings, storage: Storage, cambio: Cambio, recursos: list, avaliador: Avaliador | None = None
+) -> Application:
     async def on_shutdown(_app: Application) -> None:
-        await http.close()
+        for recurso in recursos:  # clientes HTTP (câmbio, Mercari, Vinted)
+            await recurso.close()
         storage.close()
 
     app = Application.builder().token(settings.telegram_token).post_shutdown(on_shutdown).build()
-    commands = Commands(storage, cambio)
+    commands = Commands(storage, cambio, avaliacao=avaliador is not None)
     if settings.allowed_chat_id is None:
         log.warning("ALLOWED_CHAT_ID não definido: envia /id ao bot e põe o valor no .env")
     allowed = filters.Chat(chat_id=[] if settings.allowed_chat_id is None else [settings.allowed_chat_id])
@@ -115,6 +163,25 @@ def build_application(settings: Settings, storage: Storage, cambio: Cambio, http
     app.add_handler(CommandHandler("cambio", on_cambio, filters=allowed))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & allowed, on_text))
     app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(fix:\d+|fixf:\d+:(nome|preco|estado)|st:\d+:\d|fixx:\d+)$"))
+
+    if avaliador is not None:
+
+        async def on_avaliar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            query = update.callback_query
+            await query.answer()
+            if update.effective_chat is None or update.effective_chat.id != settings.allowed_chat_id:
+                return
+            kind, pedido_id = query.data.split(":")
+            pendente = await query.message.reply_text("🔎 A preparar a avaliação…", do_quote=True)
+            progresso = Progresso(pendente)
+            r = await avaliador.avaliar(update.effective_chat.id, int(pedido_id), kind == "rv", progresso)
+            await progresso.fechar()
+            await pendente.edit_text(
+                r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
+            )
+
+        # block=False: a avaliação demora minutos e não pode bloquear as respostas imediatas.
+        app.add_handler(CallbackQueryHandler(on_avaliar, pattern=r"^(av|rv):\d+$", block=False))
 
     async def fx_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await cambio.atualizar()

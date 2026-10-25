@@ -126,3 +126,9 @@ async def test_cambio_indisponivel(storage):
 
 def test_cancelar_pedido_inexistente(commands):
     assert commands.cancelar(CHAT, 99).texto.startswith("Já não tenho esse pedido")
+
+
+def test_botoes_com_avaliacao(storage):
+    commands = Commands(storage, Cambio(storage, FakeHttp(), now=FakeClock()), avaliacao=True)
+    r = commands.texto(CHAT, "nendoroid frieren 4800")
+    assert r.botoes == [[("💡 Avaliar", "av:1"), ("✏️ Corrigir", "fix:1")]]

@@ -24,14 +24,18 @@ class Resposta:
 class Commands:
     """Comportamento do bot, sem depender do Telegram (os botões são callback_data)."""
 
-    def __init__(self, storage: Storage, cambio: Cambio) -> None:
+    def __init__(self, storage: Storage, cambio: Cambio, avaliacao: bool = False) -> None:
         self._storage = storage
         self._cambio = cambio
+        self._avaliacao = avaliacao  # mostra o botão «💡 Avaliar»
         # Correção em curso por chat: (id do pedido, "nome" | "preco").
         self._esperando: dict[int, tuple[int, str]] = {}
 
     def botoes_pedido(self, pedido_id: int) -> list[list[tuple[str, str]]]:
-        return [[("✏️ Corrigir", f"fix:{pedido_id}")]]
+        corrigir = ("✏️ Corrigir", f"fix:{pedido_id}")
+        if self._avaliacao:
+            return [[("💡 Avaliar", f"av:{pedido_id}"), corrigir]]
+        return [[corrigir]]
 
     def _imediata(self, pedido_id: int, pedido: Pedido) -> Resposta:
         texto = resposta_imediata(pedido, contas(pedido.preco_yen, self._cambio.taxa()))

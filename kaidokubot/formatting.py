@@ -16,6 +16,7 @@ HELP = (
     "• 4.800円 pop up parade fern selado\n\n"
     "O preço é o número com ¥/円/yen ou, se não houver, o último número. "
     "Estados: selado, novo, usado, sem caixa, caixa danificada (também em inglês e japonês: 未開封, 中古, 箱なし, 箱傷み…).\n\n"
+    "💡 Avaliar compara com o preço na Europa (lojas, Vinted, importar) e com o Mercari japonês; demora 1–4 min.\n\n"
     "/cambio – ver o câmbio ¥→€ (/cambio 0.0058 fixa um valor, /cambio auto volta ao automático)\n"
     "/id – mostrar o chat id"
 )
