@@ -98,3 +98,10 @@ def test_resultado_da_cache():
     assert _resultado(_mercado(), criado_em=agora - 4 * 86400 - 60, agora=agora).splitlines()[-1] == "🕒 avaliado há 4 dias"
     assert _resultado(_mercado(), criado_em=agora - 3 * 3600, agora=agora).splitlines()[-1] == "🕒 avaliado há 3 h"
     assert _resultado(_mercado(), criado_em=agora - 120, agora=agora).splitlines()[-1] == "🕒 avaliado há 2 min"
+
+
+def test_nome_da_loja_longo_e_cortado():
+    m = _mercado(novo_eu_loja="Amazon (promoção reportada em junho de 2026; PVP €69,99)", importar_yen=None,
+                 vinted_min_eur=None, vinted_max_eur=None)  # fmt: skip
+    linha = next(l for l in _resultado(m).splitlines() if l.startswith("🇪🇺"))
+    assert linha == "🇪🇺 Novo €54.90 (Amazon)"

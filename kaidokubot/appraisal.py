@@ -49,12 +49,12 @@ SCHEMA_MERCADO = {
     "type": "object",
     "properties": {
         "novo_eu_eur": {**_N, "description": "Preço novo mais baixo numa loja europeia que envie para Portugal"},
-        "novo_eu_loja": _S,
+        "novo_eu_loja": {**_S, "description": "Só o nome da loja, 1–3 palavras (ex.: Amazon.es)"},
         "vinted_min_eur": {**_N, "description": "Intervalo típico dos anúncios comparáveis da Vinted, mesmo estado"},
         "vinted_max_eur": _N,
         "vinted_n": {"type": "integer", "description": "Quantos anúncios da Vinted são comparáveis"},
         "importar_yen": {**_N, "description": "Preço numa loja online japonesa que envie para a Europa"},
-        "importar_loja": _S,
+        "importar_loja": {**_S, "description": "Só o nome da loja, 1–3 palavras (ex.: AmiAmi)"},
         "jp_min_yen": {**_N, "description": "Intervalo típico no Mercari, mesmo estado"},
         "jp_max_yen": _N,
         "jp_n": {"type": "integer", "description": "Quantos anúncios do Mercari usaste"},
@@ -68,7 +68,7 @@ SCHEMA_MERCADO = {
                 "required": ["estado", "eu_min", "eu_max", "jp_min", "jp_max"],
             },
         },
-        "razao": {"type": "string", "description": "No máximo 3 frases"},
+        "razao": {"type": "string", "description": "No máximo 2 frases curtas (≤ 250 caracteres)"},
         "fontes": {
             "type": "array",
             "description": "2–4 páginas que usaste",
@@ -128,12 +128,13 @@ def prompt_mercado(
         "3. Pesquisar na web é obrigatório (2 a 5 pesquisas, em inglês e japonês): o preço novo mais baixo numa "
         "loja europeia que envie para Portugal (ex.: Amazon.es/.de/.fr, Fnac, JapanDco, Nin-Nin-Game, Figurine "
         "Universe; para jogos e consolas também KuantoKusta e Worten) e o preço numa loja online japonesa que envie "
-        "para a Europa (AmiAmi, HobbySearch, Good Smile Online, Play-Asia), em ienes.",
+        "para a Europa (AmiAmi, HobbySearch, Good Smile Online, Play-Asia), em ienes. Só preços ATUAIS vistos na "
+        "página da própria loja: nada de notícias, promoções acabadas ou preços de lançamento (PVP).",
         "4. Ajusta ao estado: selado/novo compara com novos; usado, sem caixa ou caixa danificada valem menos. "
         "Com estado desconhecido, preenche cenarios com os cenários principais (ex.: selado e usado) e usa nos "
         "campos principais o mais provável numa loja de usados. Senão, cenarios fica vazio.",
-        "5. Nunca inventes números: null no que não encontrares. razao: no máximo 3 frases, diz de onde vêm os "
-        "números e se só havia preços pedidos. fontes: 2 a 4 páginas que usaste.",
+        "5. Nunca inventes números: null no que não encontrares. razao: no máximo 2 frases curtas para ler de pé "
+        "numa loja (de onde vêm os números e se só havia preços pedidos). fontes: 2 a 4 páginas que usaste.",
     ]
     return "\n".join(lines)
 

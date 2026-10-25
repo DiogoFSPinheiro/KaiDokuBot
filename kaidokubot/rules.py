@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import asdict, dataclass, field
 
 # --- premissas — confirmar antes da viagem -------------------------------------------------
@@ -96,14 +97,24 @@ class Veredicto:
     motivo: str | None = None  # só para "incerto"
 
 
+def loja_curta(nome: str | None) -> str | None:
+    """Só o nome da loja: o Claude às vezes junta notas («Amazon (promoção…; PVP…)»)."""
+    if not nome:
+        return None
+    curto = re.split(r"\s*[(;,–—]|\s-\s", nome, maxsplit=1)[0].strip()
+    return (curto[:24] + "…" if len(curto) > 25 else curto) or None
+
+
 def alternativas(m: Mercado, taxa: float) -> list[tuple[str, float]]:
     opcoes = []
     if m.novo_eu_eur:
-        opcoes.append((f"novo ({m.novo_eu_loja})" if m.novo_eu_loja else "novo", m.novo_eu_eur))
+        loja = loja_curta(m.novo_eu_loja)
+        opcoes.append((f"novo ({loja})" if loja else "novo", m.novo_eu_eur))
     if m.vinted_min_eur:
         opcoes.append(("Vinted", m.vinted_min_eur))
     if m.importar_yen:
-        rotulo = f"importar ({m.importar_loja})" if m.importar_loja else "importar"
+        loja = loja_curta(m.importar_loja)
+        rotulo = f"importar ({loja})" if loja else "importar"
         opcoes.append((rotulo, importar_total_eur(m.importar_yen, taxa)))
     return opcoes
 

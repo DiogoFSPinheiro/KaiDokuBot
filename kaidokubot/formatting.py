@@ -6,6 +6,7 @@ from kaidokubot.fx import EstadoCambio
 from kaidokubot.parsing import Pedido
 from kaidokubot.rules import (
     IMPOSTO, MINIMO_SEM_IMPOSTO, Contas, Mercado, Veredicto, abaixo_do_minimo, importar_total_eur,
+    loja_curta,
 )  # fmt: skip
 
 HELP = (
@@ -91,13 +92,13 @@ def _linha_veredicto(v: Veredicto) -> str:
 def _linha_europa(m: Mercado, taxa: float | None) -> str | None:
     partes = []
     if m.novo_eu_eur:
-        loja = f" ({escape(m.novo_eu_loja)})" if m.novo_eu_loja else ""
+        loja = f" ({escape(loja_curta(m.novo_eu_loja))})" if loja_curta(m.novo_eu_loja) else ""
         partes.append(f"Novo {fmt_eur(m.novo_eu_eur)}{loja}")
     vinted = _intervalo(m.vinted_min_eur, m.vinted_max_eur, fmt_eur)
     if vinted:
         partes.append(f"Vinted {vinted} ({m.vinted_n})")
     if m.importar_yen and taxa is not None:
-        loja = f" ({escape(m.importar_loja)})" if m.importar_loja else ""
+        loja = f" ({escape(loja_curta(m.importar_loja))})" if loja_curta(m.importar_loja) else ""
         partes.append(f"importar ~{fmt_eur(importar_total_eur(m.importar_yen, taxa))}{loja}")
     return "🇪🇺 " + " · ".join(partes) if partes else None
 
