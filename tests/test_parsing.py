@@ -1,0 +1,62 @@
+import pytest
+
+from kaidokubot.parsing import ParseError, Pedido, parse_estado, parse_pedido, parse_preco
+
+
+@pytest.mark.parametrize(
+    "texto, esperado",
+    [
+        ("nendoroid frieren 4800", Pedido("nendoroid frieren", 4800, "desconhecido")),
+        ("zelda totk ¥3,980 sem caixa", Pedido("zelda totk", 3980, "sem caixa")),
+        ("4.800円 pop up parade fern selado", Pedido("pop up parade fern", 4800, "selado")),
+        ("nendoroid 2367 frieren 4800", Pedido("nendoroid 2367 frieren", 4800, "desconhecido")),
+        ("¥4800 nendoroid 2367", Pedido("nendoroid 2367", 4800, "desconhecido")),
+        ("ps5 slim 39800 yen usado", Pedido("ps5 slim", 39800, "usado")),
+        ("figura ４８００円 未開封", Pedido("figura", 4800, "selado")),
+        ("figura ￥4,800 箱傷み 中古", Pedido("figura", 4800, "caixa danificada")),
+        ("Peluche Chiikawa 1.200 NOVO", Pedido("Peluche Chiikawa", 1200, "novo")),
+        ("Pokémon Scarlet 4,980 JPY caixa danificada", Pedido("Pokémon Scarlet", 4980, "caixa danificada")),
+    ],
+)
+def test_parse_pedido(texto, esperado):
+    assert parse_pedido(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto, estado",
+    [
+        ("新品未開封", "selado"),
+        ("開封品", "usado"),
+        ("usado sem caixa", "sem caixa"),
+        ("novo selado", "selado"),
+        ("damaged box", "caixa danificada"),
+        ("loose", "sem caixa"),
+        ("Usada", "usado"),
+        ("箱なし", "sem caixa"),
+        ("unused", "desconhecido"),  # "used" só conta como palavra inteira
+        ("", "desconhecido"),
+    ],
+)
+def test_parse_estado(texto, estado):
+    assert parse_estado(texto) == estado
+
+
+def test_sem_preco_da_erro():
+    with pytest.raises(ParseError, match="preço"):
+        parse_pedido("nendoroid frieren")
+
+
+def test_sem_nome_da_erro():
+    with pytest.raises(ParseError, match="nome"):
+        parse_pedido("4800 selado")
+
+
+@pytest.mark.parametrize("texto", ["figura 0", "figura 99999999"])
+def test_preco_fora_de_limites(texto):
+    with pytest.raises(ParseError, match="preço"):
+        parse_pedido(texto)
+
+
+def test_parse_preco_isolado():
+    assert parse_preco("¥3.980") == 3980
+    assert parse_preco("sem número") is None
