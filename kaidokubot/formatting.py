@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from html import escape
 
+from kaidokubot.fx import EstadoCambio
 from kaidokubot.parsing import Pedido
 from kaidokubot.rules import IMPOSTO, MINIMO_SEM_IMPOSTO, Contas, abaixo_do_minimo
 
@@ -33,6 +34,14 @@ def linha_contas(c: Contas) -> str:
         f"{fmt_yen(c.montra_yen)} → {fmt_eur(c.montra_eur)} em loja · "
         f"{fmt_eur(c.liquido_eur)} após reembolso (+{fmt_eur(c.reembolso_eur)})"
     )
+
+
+def texto_cambio(e: EstadoCambio) -> str:
+    if e.taxa is None:
+        return "💱 Câmbio indisponível (ainda não consegui obtê-lo). Fixa um valor com /cambio 0.0058"
+    origem = "manual" if e.manual else f"{e.fonte}, {e.data}"
+    taxa = f"{e.taxa:.7f}".rstrip("0")
+    return f"💱 1 ¥ = €{taxa} ({origem})\n{fmt_yen(1000)} = {fmt_eur(1000 * e.taxa)}"
 
 
 def resposta_imediata(p: Pedido, c: Contas) -> str:

@@ -81,6 +81,12 @@ def parse_preco(texto: str) -> int | None:
     return valor if PRECO_MIN <= valor <= PRECO_MAX else None
 
 
+def e_so_preco(texto: str) -> bool:
+    """O texto é só um preço (ex.: «¥5,200»), sem nome nem estado."""
+    match = _RE_PRECO.search(texto := _normalizar(texto).strip())
+    return match is not None and match.span() == (0, len(texto))
+
+
 def _estado_de(matches: list[re.Match]) -> str:
     encontrados = {_ESTADO_DE[m.group(0).lower()] for m in matches}
     return next((estado for estado in _PRIORIDADE if estado in encontrados), "desconhecido")
