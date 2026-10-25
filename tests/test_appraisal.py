@@ -235,11 +235,11 @@ async def test_links_do_resultado(storage):
                "importar_link": "https://www.amiami.com/eng/detail?gcode=X"}  # fmt: skip
     avaliador = _avaliador(storage, FakeRunner({"termos": termos, "mercado": mercado}))
     r = await avaliador.avaliar(1, 1, False, lambda _: None)
-    assert '<a href="https://www.kuantokusta.pt/p/9">novo €50 (KuantoKusta)</a>' in r.texto
-    assert '<a href="https://www.amiami.com/eng/detail?gcode=X">importar' in r.texto
-    assert '<a href="https://myfigurecollection.net/item/2059185">Nendoroid Frieren 2367</a>' in r.texto
+    assert 'novo €50 (<a href="https://www.kuantokusta.pt/p/9">KuantoKusta</a>)' in r.texto
+    assert '<a href="https://www.amiami.com/eng/detail?gcode=X">importar</a>' in r.texto
+    assert 'Nendoroid Frieren 2367 · <a href="https://myfigurecollection.net/item/2059185">ver</a>' in r.texto
     assert '<a href="https://jp.mercari.com/search?keyword=' in r.texto
-    assert '<a href="https://www.vinted.pt/catalog?search_text=nendoroid+frieren">Vinted' in r.texto
+    assert '<a href="https://www.vinted.pt/catalog?search_text=nendoroid+frieren">Vinted</a>' in r.texto
 
 
 async def test_link_com_codigo_inexistente_e_ignorado(storage):

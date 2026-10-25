@@ -196,23 +196,27 @@ def resumo(
         lines = [f"{cabecalho} · poupas {_eur0(v.poupanca_eur)} ({round(v.poupanca_pct)}%)"]
     if v.max_montra_yen and v.max_montra_yen > 0:
         lines.append(f"💴 Máximo {fmt_yen(v.max_montra_yen)}")
+    # O link fica só no nome da fonte: os valores ficam em texto normal, para se lerem bem.
     europa = []
     if m.vinted_eur:
-        europa.append(_link(f"Vinted ~{_eur0(m.vinted_eur)} ({m.vinted_n})", m.vinted_url))
+        europa.append(f"{_link('Vinted', m.vinted_url)} ~{_eur0(m.vinted_eur)} ({m.vinted_n})")
     if m.novo_eu_eur:
-        loja = loja_curta(m.novo_eu_loja)
-        europa.append(_link(f"novo {_eur0(m.novo_eu_eur)}" + (f" ({escape(loja)})" if loja else ""), m.novo_eu_url))
+        loja = escape(loja_curta(m.novo_eu_loja) or "")
+        if m.novo_eu_url.startswith("http"):
+            loja = _link(loja or "loja", m.novo_eu_url)
+        europa.append(f"novo {_eur0(m.novo_eu_eur)}" + (f" ({loja})" if loja else ""))
     if m.importar_yen and taxa is not None:
-        europa.append(_link(f"importar ~{_eur0(importar_total_eur(m.importar_yen, taxa))}", m.importar_url))
+        europa.append(f"{_link('importar', m.importar_url)} ~{_eur0(importar_total_eur(m.importar_yen, taxa))}")
     if europa:
         lines.append("🇪🇺 " + " · ".join(europa))
     jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
     if jp:
-        texto = f"Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp}{_mercari_em_eur(m, taxa)} ({m.jp_n})"
-        linha = _link(texto, m.mercari_url)
+        linha = f"{_link('Mercari', m.mercari_url)} {'à venda ' if m.jp_so_pedidos else ''}{jp}"
+        linha += f"{_mercari_em_eur(m, taxa)} ({m.jp_n})"
         lines.append(f"🇯🇵 {linha}" + (" · 👀 caro aqui" if v.caro_no_japao else ""))
     if m.produto:
-        lines.append(f"🔍 {_link(escape(m.produto), m.produto_url)}")
+        ver = f" · {_link('ver', m.produto_url)}" if m.produto_url.startswith("http") else ""
+        lines.append(f"🔍 {escape(m.produto)}{ver}")
     if estado == "desconhecido":
         lines.append("❔ Sem estado: comparei como usado (✏️ Corrigir para afinar)")
     lines += [f"⚠️ {escape(aviso)}" for aviso in m.avisos]
