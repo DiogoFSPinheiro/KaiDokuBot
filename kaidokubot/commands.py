@@ -9,7 +9,10 @@ from kaidokubot.rules import contas
 from kaidokubot.storage import Storage
 
 NAO_EXISTE = "Já não tenho esse pedido. Envia-o outra vez."
-CANCELAR = ("Cancelar", "fixx")
+
+
+def _cancelar(pedido_id: int) -> tuple[str, str]:
+    return ("Cancelar", f"fixx:{pedido_id}")
 
 
 @dataclass(frozen=True)
@@ -27,9 +30,12 @@ class Commands:
         # Correção em curso por chat: (id do pedido, "nome" | "preco").
         self._esperando: dict[int, tuple[int, str]] = {}
 
+    def botoes_pedido(self, pedido_id: int) -> list[list[tuple[str, str]]]:
+        return [[("✏️ Corrigir", f"fix:{pedido_id}")]]
+
     def _imediata(self, pedido_id: int, pedido: Pedido) -> Resposta:
         texto = resposta_imediata(pedido, contas(pedido.preco_yen, self._cambio.taxa()))
-        return Resposta(texto, [[("✏️ Corrigir", f"fix:{pedido_id}")]])
+        return Resposta(texto, self.botoes_pedido(pedido_id))
 
     def texto(self, chat_id: int, texto: str) -> Resposta:
         esperando = self._esperando.pop(chat_id, None)
@@ -70,7 +76,7 @@ class Commands:
         campos = [("Nome", "nome"), ("Preço", "preco"), ("Estado", "estado")]
         return Resposta(
             "O que queres corrigir?",
-            [[(rotulo, f"fixf:{pedido_id}:{campo}") for rotulo, campo in campos], [CANCELAR]],
+            [[(rotulo, f"fixf:{pedido_id}:{campo}") for rotulo, campo in campos], [_cancelar(pedido_id)]],
         )
 
     def pedir_campo(self, chat_id: int, pedido_id: int, campo: str) -> Resposta:
@@ -78,10 +84,10 @@ class Commands:
             return Resposta(NAO_EXISTE)
         if campo == "estado":
             botoes = [(estado, f"st:{pedido_id}:{i}") for i, estado in enumerate(ESTADOS)]
-            return Resposta("Qual é o estado?", [botoes[i : i + 2] for i in range(0, len(botoes), 2)] + [[CANCELAR]])
+            return Resposta("Qual é o estado?", [botoes[i : i + 2] for i in range(0, len(botoes), 2)] + [[_cancelar(pedido_id)]])
         self._esperando[chat_id] = (pedido_id, campo)
         pergunta = "Escreve o nome certo:" if campo == "nome" else "Escreve o preço certo (ex.: 4800):"
-        return Resposta(pergunta, [[CANCELAR]])
+        return Resposta(pergunta, [[_cancelar(pedido_id)]])
 
     def definir_estado(self, pedido_id: int, indice: int) -> Resposta:
         pedido = self._storage.get_pedido(pedido_id)
@@ -93,9 +99,10 @@ class Commands:
         self._storage.update_pedido(pedido_id, pedido)
         return self._imediata(pedido_id, pedido)
 
-    def cancelar(self, chat_id: int) -> Resposta:
+    def cancelar(self, chat_id: int, pedido_id: int) -> Resposta:
         self._esperando.pop(chat_id, None)
-        return Resposta("Ok, fica como estava.")
+        pedido = self._storage.get_pedido(pedido_id)
+        return Resposta(NAO_EXISTE) if pedido is None else self._imediata(pedido_id, pedido)
 
     async def cambio(self, args: list[str]) -> str:
         if not args:

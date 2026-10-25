@@ -51,8 +51,35 @@ def build_application(settings: Settings, storage: Storage, cambio: Cambio, http
     async def on_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text(await commands.cambio(context.args))
 
+    # Mensagem que está a pedir o nome/preço certo, por chat: (message_id, texto HTML original).
+    a_pedir: dict[int, tuple[int, str]] = {}
+
+    async def fechar_pedido_de_texto(bot, chat_id: int) -> None:
+        """Tira os botões e a pergunta da mensagem que pedia a correção (não deixa botões soltos)."""
+        pendente = a_pedir.pop(chat_id, None)
+        if pendente is None:
+            return
+        message_id, original = pendente
+        try:
+            await bot.edit_message_text(
+                original, chat_id=chat_id, message_id=message_id, parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )  # fmt: skip
+        except BadRequest:
+            pass
+
     async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await send(update, commands.texto(update.effective_chat.id, update.effective_message.text))
+        chat_id = update.effective_chat.id
+        await fechar_pedido_de_texto(context.bot, chat_id)
+        await send(update, commands.texto(chat_id, update.effective_message.text))
+
+    async def edit(query, texto: str, r: Resposta) -> None:
+        try:
+            await query.edit_message_text(
+                texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
+            )
+        except BadRequest as exc:  # ex.: "message is not modified"
+            log.debug("Edição ignorada: %s", exc)
 
     async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -61,30 +88,33 @@ def build_application(settings: Settings, storage: Storage, cambio: Cambio, http
             return
         chat_id = update.effective_chat.id
         kind, *args = query.data.split(":")
+        pedido_id = int(args[0])
+        # Os menus editam a própria mensagem do pedido, em vez de enviarem mensagens novas.
+        original = query.message.text_html
         if kind == "fix":
-            r = commands.menu_corrigir(int(args[0]))
+            await edit(query, original, commands.menu_corrigir(pedido_id))
         elif kind == "fixf":
-            r = commands.pedir_campo(chat_id, int(args[0]), args[1])
-        elif kind == "st":
-            r = commands.definir_estado(int(args[0]), int(args[1]))
+            r = commands.pedir_campo(chat_id, pedido_id, args[1])
+            if args[1] == "estado":
+                await edit(query, original, r)
+            else:
+                await fechar_pedido_de_texto(context.bot, chat_id)
+                a_pedir[chat_id] = (query.message.message_id, original)
+                await edit(query, f"{original}\n\n✏️ <i>{r.texto}</i>", r)
         else:
-            r = commands.cancelar(chat_id)
-        if kind in ("fix", "fixf"):
-            await send(update, r)
-            return
-        # Escolha final (estado / cancelar): substitui o menu para não ficarem botões soltos.
-        try:
-            await query.edit_message_text(
-                r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
-            )
-        except BadRequest:
-            await send(update, r)
+            if a_pedir.get(chat_id, (None,))[0] == query.message.message_id:
+                a_pedir.pop(chat_id)
+            if kind == "st":
+                r = commands.definir_estado(pedido_id, int(args[1]))
+            else:
+                r = commands.cancelar(chat_id, pedido_id)
+            await edit(query, r.texto, r)
 
     app.add_handler(CommandHandler("id", on_id))
     app.add_handler(CommandHandler(["start", "help"], on_start, filters=allowed))
     app.add_handler(CommandHandler("cambio", on_cambio, filters=allowed))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & allowed, on_text))
-    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(fix:\d+|fixf:\d+:(nome|preco|estado)|st:\d+:\d|fixx)$"))
+    app.add_handler(CallbackQueryHandler(on_button, pattern=r"^(fix:\d+|fixf:\d+:(nome|preco|estado)|st:\d+:\d|fixx:\d+)$"))
 
     async def fx_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await cambio.atualizar()

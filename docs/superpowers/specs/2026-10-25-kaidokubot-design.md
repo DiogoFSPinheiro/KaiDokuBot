@@ -117,7 +117,11 @@ Pipeline (uma única mensagem de progresso, editada no máximo a cada ~3 s):
 Fontes: Amazon.es · Vinted · Mercari
 ```
 - `run_claude`: `claude -p --output-format stream-json --verbose --model … --tools WebSearch --allowedTools WebSearch --strict-mcp-config --disable-slash-commands --no-session-persistence --setting-sources "" --system-prompt … --json-schema …`, prompt no stdin, `subprocess.Popen` lido linha a linha numa thread, timeout 300 s, resposta em `structured_output` do evento `result`. Erros → `PriceCheckError` com mensagem curta.
-- Antes de implementar: teste real para confirmar que o Claude encontra preços europeus (novo e Vinted) para uma figura concreta; se a Vinted não aparecer por pesquisa web, reutilizar o cliente Vinted do VintedBot.
+- Teste real (Nendoroid 2367 Frieren, 25/10): o `WebSearch` encontra às vezes lojas europeias (JapanDco €54.90) e o preço oficial japonês (¥6.500), mas **nunca a Vinted**; o eBay só dá anúncios soltos em USD e bloqueia acessos diretos (403, mesmo com `curl_cffi`). Por isso:
+  - **Vinted:** o bot pesquisa ele próprio (`kaidokubot/vinted.py`, cliente adaptado do VintedBot, `curl_cffi`), com o termo em inglês; 30 anúncios com título, preço com proteção do comprador e estado. São preços pedidos.
+  - **eBay:** fora.
+  - **Lojas europeias (novo) e loja online japonesa (importar):** o Claude com `WebSearch`.
+- O veredicto usa como alternativa europeia a mais barata entre: novo numa loja europeia, o mínimo do intervalo Vinted no mesmo estado, e importar do Japão (`(¥ / 1.10 × taxa + portes) × 1.23 + taxa CTT`, com portes e taxa CTT como premissas em `rules.py`).
 
 ## 6. Fotos (fase 3)
 - Testado (fase 0): imagem em base64 num bloco `image` via `--input-format stream-json --output-format stream-json --verbose --tools ""` + `--json-schema`; ~4 s, sem acesso a ficheiros. Leu corretamente uma etiqueta japonesa desfocada (nome, ¥4.800, 箱傷み → caixa danificada), sem confundir o número da Nendoroid com o preço.

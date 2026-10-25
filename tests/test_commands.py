@@ -42,7 +42,7 @@ def test_menu_corrigir(commands):
     commands.texto(CHAT, "nendoroid frieren 4800")
     r = commands.menu_corrigir(1)
     datas = [data for linha in r.botoes for _, data in linha]
-    assert datas == ["fixf:1:nome", "fixf:1:preco", "fixf:1:estado", "fixx"]
+    assert datas == ["fixf:1:nome", "fixf:1:preco", "fixf:1:estado", "fixx:1"]
 
 
 def test_corrigir_preco(commands, storage):
@@ -65,7 +65,7 @@ def test_corrigir_estado(commands, storage):
     commands.texto(CHAT, "nendoroid frieren 4800")
     r = commands.pedir_campo(CHAT, 1, "estado")
     datas = [data for linha in r.botoes for _, data in linha]
-    assert datas == [f"st:1:{i}" for i in range(6)] + ["fixx"]
+    assert datas == [f"st:1:{i}" for i in range(6)] + ["fixx:1"]
     r = commands.definir_estado(1, 0)
     assert storage.get_pedido(1).estado == "selado"
     assert "Estado: selado" in r.texto
@@ -101,7 +101,10 @@ def test_estado_invalido(commands):
 def test_cancelar(commands, storage):
     commands.texto(CHAT, "nendoroid frieren 4800")
     commands.pedir_campo(CHAT, 1, "nome")
-    assert isinstance(commands.cancelar(CHAT), Resposta)
+    r = commands.cancelar(CHAT, 1)
+    assert isinstance(r, Resposta)
+    assert r.texto.startswith("📦 <b>nendoroid frieren</b>")
+    assert r.botoes == commands.botoes_pedido(1)
     commands.texto(CHAT, "abc 100")
     assert storage.get_pedido(1).nome == "nendoroid frieren"
     assert storage.get_pedido(2).nome == "abc"
@@ -119,3 +122,7 @@ async def test_cambio_indisponivel(storage):
     commands = Commands(storage, Cambio(storage, FakeHttp(), now=FakeClock()))
     assert "indisponível" in await commands.cambio([])
     assert "câmbio indisponível" in commands.texto(CHAT, "zelda 3980").texto
+
+
+def test_cancelar_pedido_inexistente(commands):
+    assert commands.cancelar(CHAT, 99).texto.startswith("Já não tenho esse pedido")
