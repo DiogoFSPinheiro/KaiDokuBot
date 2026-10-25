@@ -28,7 +28,9 @@ def _avaliador(storage, runner=None, mercari=None, vinted=None, max_dia=30, cloc
         storage, cambio, runner or FakeRunner({"termos": TERMOS, "mercado": MERCADO}, pesquisas=["q1"]),
         mercari or FakeMercari([Anuncio("ねんどろいど フリーレン 2367", 4200, "novo")], [Anuncio("x", 6800, "novo")]),
         vinted or FakeVinted([Anuncio("Nendoroid Frieren 2367", 63.7, "Novo com etiquetas")]),
-        kuantokusta or FakeKuantoKusta([Anuncio("Good Smile Nendoroid Frieren", 49.9, "novo · 3 lojas · Figuras")]),
+        kuantokusta or FakeKuantoKusta(
+            [Anuncio("Good Smile Nendoroid Frieren", 49.9, "novo · 3 lojas · Figuras", "https://www.kuantokusta.pt/p/9")]
+        ),
         max_dia=max_dia, margem=20, cache_dias=30, now=clock or FakeClock(),
     )  # fmt: skip
 
@@ -52,11 +54,11 @@ async def test_avaliacao_completa(storage):
     assert [(tipo, tools) for tipo, _, tools in runner.chamadas] == [("termos", "WebSearch"), ("mercado", "WebSearch")]
     _, prompt, _ = runner.chamadas[1]
     assert "Produto identificado: Good Smile Company Nendoroid Frieren 2367" in prompt
-    assert "Good Smile Nendoroid Frieren | €49.90 | novo · 3 lojas · Figuras" in prompt
+    assert "[K1] Good Smile Nendoroid Frieren | €49.90 | novo · 3 lojas · Figuras" in prompt
+    assert "[M1] ねんどろいど フリーレン 2367 | ¥4.200 | novo" in prompt
     assert any("🔍 A identificar: nendoroid frieren prix" in p for p in progresso)
     assert "🔍 Nendoroid Frieren 2367" in r.texto
-    assert "ねんどろいど フリーレン 2367 | ¥4.200 | novo" in prompt
-    assert "Nendoroid Frieren 2367 | €63.70 | Novo com etiquetas" in prompt
+    assert "[V1] Nendoroid Frieren 2367 | €63.70 | Novo com etiquetas" in prompt
     assert "¥4.800" in prompt and "selado" in prompt
     assert any(p.startswith("🔎 Mercari: 1 vendidos") for p in progresso)
     assert any("🌐 A pesquisar: nendoroid frieren prix" in p for p in progresso)
@@ -224,3 +226,23 @@ async def test_kuantokusta_em_baixo_continua(storage):
 
     r = await _avaliador(storage, kuantokusta=FakeKuantoKusta(erro=FonteError("x"))).avaliar(1, 1, False, lambda _: None)
     assert "⚠️ KuantoKusta indisponível" in r.texto
+
+
+
+async def test_links_do_resultado(storage):
+    termos = {**TERMOS, "referencia_url": "https://myfigurecollection.net/item/2059185"}
+    mercado = {**MERCADO, "novo_eu_eur": 49.9, "novo_eu_loja": "KuantoKusta", "novo_eu_link": "K1",
+               "importar_link": "https://www.amiami.com/eng/detail?gcode=X"}  # fmt: skip
+    avaliador = _avaliador(storage, FakeRunner({"termos": termos, "mercado": mercado}))
+    r = await avaliador.avaliar(1, 1, False, lambda _: None)
+    assert '<a href="https://www.kuantokusta.pt/p/9">novo €50 (KuantoKusta)</a>' in r.texto
+    assert '<a href="https://www.amiami.com/eng/detail?gcode=X">importar' in r.texto
+    assert '<a href="https://myfigurecollection.net/item/2059185">Nendoroid Frieren 2367</a>' in r.texto
+    assert '<a href="https://jp.mercari.com/search?keyword=' in r.texto
+    assert '<a href="https://www.vinted.pt/catalog?search_text=nendoroid+frieren">Vinted' in r.texto
+
+
+async def test_link_com_codigo_inexistente_e_ignorado(storage):
+    mercado = {**MERCADO, "novo_eu_link": "K99"}
+    r = await _avaliador(storage, FakeRunner({"termos": TERMOS, "mercado": mercado})).avaliar(1, 1, False, lambda _: None)
+    assert "novo €55 (JapanDco)" in r.texto and 'kuantokusta.pt/p/' not in r.texto

@@ -33,12 +33,18 @@ class FonteError(Exception):
 @dataclass(frozen=True)
 class Anuncio:
     titulo: str
-    preco: float  # ¥ no Mercari, € na Vinted
+    preco: float  # ¥ no Mercari, € na Vinted e no KuantoKusta
     estado: str
+    url: str = ""
 
 
 def anuncio_mercari(item) -> Anuncio:
-    return Anuncio(item.name, float(item.price), _ESTADO_MERCARI.get(item.item_condition_id, "?"))
+    # Os anúncios das lojas (Mercari Shops) têm outro endereço.
+    if getattr(item, "item_type", "") == "ITEM_TYPE_BEYOND":
+        url = f"https://jp.mercari.com/shops/product/{item.id_}"
+    else:
+        url = f"https://jp.mercari.com/item/{item.id_}"
+    return Anuncio(item.name, float(item.price), _ESTADO_MERCARI.get(item.item_condition_id, "?"), url)
 
 
 def anuncio_vinted(raw: dict) -> Anuncio | None:
@@ -52,7 +58,7 @@ def anuncio_vinted(raw: dict) -> Anuncio | None:
     # second_line: "<tamanho> · <estado>" (às vezes só o estado).
     second_line = (raw.get("item_box") or {}).get("second_line") or ""
     estado = second_line.rsplit("·", 1)[-1].strip() if second_line else "?"
-    return Anuncio(raw.get("title") or "", preco, estado or "?")
+    return Anuncio(raw.get("title") or "", preco, estado or "?", raw.get("url") or "")
 
 
 def anuncio_kuantokusta(raw: dict) -> Anuncio | None:
@@ -64,7 +70,9 @@ def anuncio_kuantokusta(raw: dict) -> Anuncio | None:
     detalhe = f"novo · {lojas} {'loja' if lojas == 1 else 'lojas'}"
     if raw.get("category"):
         detalhe += f" · {raw['category']}"
-    return Anuncio(raw.get("name") or "", preco, detalhe)
+    caminho = raw.get("url") or ""
+    url = f"https://www.kuantokusta.pt{caminho}" if caminho.startswith("/") else caminho
+    return Anuncio(raw.get("name") or "", preco, detalhe, url)
 
 
 class Mercari:

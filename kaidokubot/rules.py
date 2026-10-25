@@ -84,6 +84,12 @@ class Mercado:
     avisos: list[str] = field(default_factory=list)
     vinted_tipico_eur: float | None = None  # mediana dos comparáveis (o mínimo costuma ser um outlier)
     produto: str = ""  # produto exato identificado (fabricante, linha, tamanho)
+    # Links para confirmar com um toque: produto de referência, loja do preço novo, importar, pesquisas.
+    produto_url: str = ""
+    novo_eu_url: str = ""
+    importar_url: str = ""
+    vinted_url: str = ""
+    mercari_url: str = ""
 
     @property
     def vinted_eur(self) -> float | None:

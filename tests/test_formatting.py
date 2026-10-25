@@ -154,3 +154,26 @@ def test_resumo_incerto_e_so_pedidos():
 def test_resumo_mostra_quantos_anuncios_da_vinted():
     m = _mercado(vinted_n=1, novo_eu_eur=None, importar_yen=None, produto="")
     assert "🇪🇺 Vinted ~€50 (1)" in _resumo(m).splitlines()
+
+
+
+def test_resumo_com_links_para_confirmar():
+    m = _mercado(
+        novo_eu_url="https://www.kuantokusta.pt/p/1", vinted_url="https://www.vinted.pt/catalog?search_text=x",
+        mercari_url="https://jp.mercari.com/search?keyword=x", produto_url="https://myfigurecollection.net/item/1",
+        importar_url="https://www.amiami.com/x",
+    )  # fmt: skip
+    linhas = _resumo(m).splitlines()
+    assert linhas[2] == (
+        '🇪🇺 <a href="https://www.vinted.pt/catalog?search_text=x">Vinted ~€50 (12)</a> · '
+        '<a href="https://www.kuantokusta.pt/p/1">novo €55 (JapanDco)</a> · '
+        '<a href="https://www.amiami.com/x">importar ~€63</a>'
+    )
+    assert linhas[3] == '🇯🇵 <a href="https://jp.mercari.com/search?keyword=x">Mercari ¥3.900–4.500 (8)</a> · 👀 caro aqui'
+    assert linhas[4] == '🔍 <a href="https://myfigurecollection.net/item/1">Nendoroid Frieren 2367</a>'
+
+
+def test_link_invalido_fica_so_texto():
+    m = _mercado(novo_eu_url="javascript:alert(1)", importar_yen=None, vinted_tipico_eur=None, vinted_min_eur=None,
+                 vinted_max_eur=None)  # fmt: skip
+    assert _resumo(m).splitlines()[2] == "🇪🇺 novo €55 (JapanDco)"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from urllib.parse import quote_plus
@@ -43,10 +44,11 @@ SCHEMA_TERMOS = {
         "linha": {"type": "string", "description": "Linha/série do produto, ex.: Nendoroid, Pop Up Parade, KADOKAWA Collection LIGHT"},
         "personagem": {"type": "string", "description": "Personagem ou título (ex.: Frieren, Zelda: Tears of the Kingdom)"},
         "referencia": {"type": "string", "description": "Só nº de catálogo ou versão (ex.: 2367, Memory Snow ver.); vazio se não houver"},
+        "referencia_url": {**_S, "description": "Página que confirma o produto (MyFigureCollection, fabricante)"},
         "termo_jp": {"type": "string", "description": "Como aparece nos anúncios do Mercari Japão, específico"},
         "termo_en": {"type": "string", "description": "Como apareceria num anúncio europeu, específico"},
     },
-    "required": ["fabricante", "linha", "personagem", "referencia", "termo_jp", "termo_en"],
+    "required": ["fabricante", "linha", "personagem", "referencia", "referencia_url", "termo_jp", "termo_en"],
 }
 
 SCHEMA_MERCADO = {
@@ -55,12 +57,14 @@ SCHEMA_MERCADO = {
     "properties": {
         "novo_eu_eur": {**_N, "description": "Preço novo mais baixo numa loja europeia que envie para Portugal"},
         "novo_eu_loja": {**_S, "description": "Só o nome da loja, 1–3 palavras (ex.: Amazon.es)"},
+        "novo_eu_link": {**_S, "description": "Código [K#] do KuantoKusta ou URL da página da loja com esse preço"},
         "vinted_min_eur": {**_N, "description": "Intervalo típico dos anúncios comparáveis da Vinted, mesmo estado"},
         "vinted_max_eur": _N,
         "vinted_tipico_eur": {**_N, "description": "Mediana dos anúncios comparáveis da Vinted, mesmo estado"},
         "vinted_n": {"type": "integer", "description": "Quantos anúncios da Vinted são comparáveis"},
         "importar_yen": {**_N, "description": "Preço numa loja online japonesa que envie para a Europa"},
         "importar_loja": {**_S, "description": "Só o nome da loja, 1–3 palavras (ex.: AmiAmi)"},
+        "importar_link": {**_S, "description": "URL da página da loja com esse preço"},
         "jp_min_yen": {**_N, "description": "Intervalo típico no Mercari, mesmo estado"},
         "jp_max_yen": _N,
         "jp_n": {"type": "integer", "description": "Quantos anúncios do Mercari usaste"},
@@ -86,7 +90,7 @@ SCHEMA_MERCADO = {
         },
     },
     "required": [
-        "novo_eu_eur", "novo_eu_loja", "vinted_min_eur", "vinted_max_eur", "vinted_tipico_eur", "vinted_n", "importar_yen",
+        "novo_eu_eur", "novo_eu_loja", "novo_eu_link", "importar_link", "vinted_min_eur", "vinted_max_eur", "vinted_tipico_eur", "vinted_n", "importar_yen",
         "importar_loja", "jp_min_yen", "jp_max_yen", "jp_n", "jp_so_pedidos", "cenarios", "razao", "fontes",
     ],
 }  # fmt: skip
@@ -103,7 +107,8 @@ def prompt_termos(pedido: Pedido) -> str:
         "cenas). referencia só quando há nº de catálogo ou versão.\n"
         "termo_jp: como aparece nos anúncios do Mercari Japão, específico o suficiente para não apanhar outras "
         "figuras da mesma personagem (ex.: «KADOKAWA Collection LIGHT エミリア», «ねんどろいど フリーレン 2367»).\n"
-        "termo_en: como apareceria num anúncio europeu, também específico (ex.: «kadokawa collection light emilia»)."
+        "termo_en: como apareceria num anúncio europeu, também específico (ex.: «kadokawa collection light emilia»).\n"
+        "referencia_url: uma página que confirme o produto (MyFigureCollection ou site do fabricante), se a viste."
     )
 
 
@@ -118,10 +123,13 @@ def identidade_de(termos: dict) -> str:
     return "|".join(str(termos.get(campo) or "").strip() for campo in ("linha", "personagem", "referencia"))
 
 
-def _lista(anuncios: list[Anuncio] | None, fmt: Callable[[float], str]) -> list[str]:
+def _lista(anuncios: list[Anuncio] | None, fmt: Callable[[float], str], codigo: str) -> list[str]:
+    # Cada anúncio tem um código ([K1]…) para o Claude dizer qual usou; o bot transforma-o no link.
     if anuncios is None:
         return ["(indisponível)"]
-    return [f"- {a.titulo} | {fmt(a.preco)} | {a.estado}" for a in anuncios] or ["(nenhum)"]
+    return [f"- [{codigo}{i}] {a.titulo} | {fmt(a.preco)} | {a.estado}" for i, a in enumerate(anuncios, 1)] or [
+        "(nenhum)"
+    ]
 
 
 def prompt_mercado(
@@ -137,16 +145,16 @@ def prompt_mercado(
         "Quero saber quanto me custaria na Europa (vivo em Portugal) e se o preço é normal para o Japão.",
         "",
         "Mercari Japão — VENDIDOS (vendas concluídas):",
-        *_lista(vendidos, fmt_yen),
+        *_lista(vendidos, fmt_yen, "M"),
         "",
         "Mercari Japão — À VENDA (preços pedidos):",
-        *_lista(a_venda, fmt_yen),
+        *_lista(a_venda, fmt_yen, "A"),
         "",
         "Vinted (Europa; preços pedidos em € com a proteção do comprador, sem portes):",
-        *_lista(vinted, fmt_eur),
+        *_lista(vinted, fmt_eur, "V"),
         "",
         "KuantoKusta (comparador português; preço novo mais baixo entre lojas que vendem para Portugal):",
-        *_lista(kuantokusta, fmt_eur),
+        *_lista(kuantokusta, fmt_eur, "K"),
         "",
         "Só contam anúncios do MESMO produto (mesmo fabricante, linha e tamanho). Ignora outros artigos ou "
         "personagens, minis/さぷらいず, lotes, peças soltas, outro estado e, se o artigo não for uma, figuras de "
@@ -160,10 +168,11 @@ def prompt_mercado(
         "2. Vinted: intervalo típico (€) dos anúncios comparáveis no mesmo estado (vinted_min_eur, vinted_max_eur, "
         "vinted_n) e a mediana desses anúncios (vinted_tipico_eur).",
         "3. Preço novo na Europa (novo_eu_eur, novo_eu_loja): se o KuantoKusta tiver o MESMO produto, usa esse "
-        "preço (loja «KuantoKusta»). Senão, pesquisa na web (nome exato com «€»; ex.: Amazon.es/.de/.fr, Fnac, "
+        "preço (loja «KuantoKusta», novo_eu_link = o código [K#]). Senão, pesquisa na web (nome exato com «€»; ex.: Amazon.es/.de/.fr, Fnac, "
         "JapanDco, Nin-Nin-Game). Pesquisa também (em inglês e japonês) o preço numa loja online japonesa que envie "
         "para a Europa (AmiAmi, HobbySearch, Good Smile Online, Play-Asia), em ienes. Só preços ATUAIS vistos na "
-        "página da própria loja: nada de notícias, promoções acabadas ou preços de lançamento (PVP).",
+        "página da própria loja: nada de notícias, promoções acabadas ou preços de lançamento (PVP). Para preços "
+        "da web, novo_eu_link/importar_link = o URL dessa página.",
         "4. Ajusta ao estado: selado/novo compara com novos; usado, sem caixa ou caixa danificada valem menos. "
         "Com estado desconhecido, preenche cenarios com os cenários principais (ex.: selado e usado) e usa nos "
         "campos principais o cenário usado. Senão, cenarios fica vazio.",
@@ -180,7 +189,18 @@ def _numero(valor) -> float | None:
     return numero if numero > 0 else None
 
 
-def mercado_de(dados: dict, termos: dict, avisos: list[str]) -> Mercado:
+def _resolver_link(valor, anuncios: list[Anuncio] | None) -> str:
+    """Código [K#] → URL do anúncio; URL http(s) fica igual; o resto é ignorado."""
+    texto = str(valor or "").strip()
+    if codigo := re.fullmatch(r"\[?K(\d+)\]?", texto):
+        indice = int(codigo.group(1)) - 1
+        return anuncios[indice].url if anuncios and 0 <= indice < len(anuncios) else ""
+    return texto if texto.startswith(("https://", "http://")) else ""
+
+
+def mercado_de(
+    dados: dict, termos: dict, avisos: list[str], kuantokusta: list[Anuncio] | None = None
+) -> Mercado:
     try:
         return Mercado(
             termo_jp=str(termos["termo_jp"]),
@@ -202,6 +222,9 @@ def mercado_de(dados: dict, termos: dict, avisos: list[str]) -> Mercado:
             razao=str(dados.get("razao") or ""),
             fontes=[f for f in dados.get("fontes") or [] if isinstance(f, dict) and f.get("nome") and f.get("url")],
             avisos=avisos,
+            produto_url=_resolver_link(termos.get("referencia_url"), None),
+            novo_eu_url=_resolver_link(dados.get("novo_eu_link"), kuantokusta),
+            importar_url=_resolver_link(dados.get("importar_link"), None),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ClaudeError("resposta incompleta do Claude") from exc
@@ -368,7 +391,7 @@ class Avaliador:
             prompt_mercado(pedido, termos, vendidos, a_venda, anuncios_vinted, novos), SCHEMA_MERCADO,
             system=SYSTEM_MERCADO, tools="WebSearch", on_search=on_search,
         )  # fmt: skip
-        mercado = mercado_de(dados, termos, avisos)
+        mercado = mercado_de(dados, termos, avisos, novos)
         # Links para eu ver os anúncios do Mercari e da Vinted, e a Amazon.es, que bloqueia acessos automáticos.
         extras = [{"nome": "Amazon.es", "url": f"https://www.amazon.es/s?k={quote_plus(mercado.termo_en)}"}]
         if vendidos is not None:
@@ -379,4 +402,8 @@ class Avaliador:
             extras.append({"nome": "Vinted", "url": url})
         if novos is not None:
             extras.append({"nome": "KuantoKusta", "url": f"{KUANTOKUSTA_URL}?q={quote_plus(mercado.termo_en)}"})
-        return Mercado.from_dict({**mercado.to_dict(), "fontes": mercado.fontes[:4] + extras})
+        links = {e["nome"]: e["url"] for e in extras}
+        return Mercado.from_dict({
+            **mercado.to_dict(), "fontes": mercado.fontes[:4] + extras,
+            "mercari_url": links.get("Mercari vendidos", ""), "vinted_url": links.get("Vinted", ""),
+        })  # fmt: skip

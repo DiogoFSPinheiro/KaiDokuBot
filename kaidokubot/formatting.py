@@ -154,6 +154,13 @@ def resultado(p: Pedido, c: Contas, m: Mercado, v: Veredicto, criado_em: float |
     return "\n".join(lines)
 
 
+def _link(texto: str, url: str) -> str:
+    """Texto (já em HTML) com link, se o URL for http(s); senão só o texto."""
+    if not url.startswith(("https://", "http://")):
+        return texto
+    return f'<a href="{escape(url, quote=True)}">{texto}</a>'
+
+
 def _eur0(valor: float) -> str:
     return f"€{round(valor)}"
 
@@ -178,20 +185,20 @@ def resumo(
         lines.append(f"💴 Máximo {fmt_yen(v.max_montra_yen)}")
     europa = []
     if m.vinted_eur:
-        europa.append(f"Vinted ~{_eur0(m.vinted_eur)} ({m.vinted_n})")
+        europa.append(_link(f"Vinted ~{_eur0(m.vinted_eur)} ({m.vinted_n})", m.vinted_url))
     if m.novo_eu_eur:
         loja = loja_curta(m.novo_eu_loja)
-        europa.append(f"novo {_eur0(m.novo_eu_eur)}" + (f" ({escape(loja)})" if loja else ""))
+        europa.append(_link(f"novo {_eur0(m.novo_eu_eur)}" + (f" ({escape(loja)})" if loja else ""), m.novo_eu_url))
     if m.importar_yen and taxa is not None:
-        europa.append(f"importar ~{_eur0(importar_total_eur(m.importar_yen, taxa))}")
+        europa.append(_link(f"importar ~{_eur0(importar_total_eur(m.importar_yen, taxa))}", m.importar_url))
     if europa:
         lines.append("🇪🇺 " + " · ".join(europa))
     jp = _intervalo(m.jp_min_yen, m.jp_max_yen, fmt_yen)
     if jp:
-        linha = f"🇯🇵 Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp} ({m.jp_n})"
-        lines.append(linha + (" · 👀 caro aqui" if v.caro_no_japao else ""))
+        linha = _link(f"Mercari {'à venda ' if m.jp_so_pedidos else ''}{jp} ({m.jp_n})", m.mercari_url)
+        lines.append(f"🇯🇵 {linha}" + (" · 👀 caro aqui" if v.caro_no_japao else ""))
     if m.produto:
-        lines.append(f"🔍 {escape(m.produto)}")
+        lines.append(f"🔍 {_link(escape(m.produto), m.produto_url)}")
     if estado == "desconhecido":
         lines.append("❔ Sem estado: comparei como usado (✏️ Corrigir para afinar)")
     lines += [f"⚠️ {escape(aviso)}" for aviso in m.avisos]
