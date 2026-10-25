@@ -21,3 +21,73 @@ def test_contas_sem_taxa():
 def test_abaixo_do_minimo():
     assert abaixo_do_minimo(5499) is True
     assert abaixo_do_minimo(5500) is False
+
+
+# --- veredicto (fase 2) ---------------------------------------------------------------
+from kaidokubot.rules import Mercado, calcular_veredicto, importar_total_eur  # noqa: E402
+
+
+def _mercado(**overrides):
+    campos = dict(
+        termo_jp="ねんどろいど フリーレン", termo_en="nendoroid frieren 2367",
+        novo_eu_eur=54.9, novo_eu_loja="JapanDco", vinted_min_eur=45.0, vinted_max_eur=65.0, vinted_n=12,
+        importar_yen=6500.0, importar_loja="AmiAmi", jp_min_yen=3900.0, jp_max_yen=4500.0, jp_n=8,
+        jp_so_pedidos=False, cenarios=[], razao="Razão.", fontes=[], avisos=[],
+    )  # fmt: skip
+    campos.update(overrides)
+    return Mercado(**campos)
+
+
+def test_importar_total():
+    assert round(importar_total_eur(6500, TAXA), 2) == 62.51
+
+
+def test_mercado_ida_e_volta_em_dict():
+    m = _mercado(fontes=[{"nome": "a", "url": "u"}])
+    assert Mercado.from_dict(m.to_dict()) == m
+
+
+def test_compensa():
+    v = calcular_veredicto(_mercado(), contas(4800, TAXA), TAXA, 20)
+    assert v.codigo == "compensa"
+    assert v.melhor == ("Vinted", 45.0)
+    assert round(v.poupanca_eur, 2) == 20.14
+    assert round(v.poupanca_pct) == 45
+    assert v.max_montra_yen == 6900
+    assert v.caro_no_japao is True
+
+
+def test_pouca_diferenca():
+    v = calcular_veredicto(_mercado(vinted_min_eur=28.0), contas(4800, TAXA), TAXA, 20)
+    assert v.codigo == "pouca"
+    assert round(v.poupanca_pct) == 11
+
+
+def test_nao_compensa():
+    v = calcular_veredicto(_mercado(vinted_min_eur=20.0), contas(4800, TAXA), TAXA, 20)
+    assert v.codigo == "nao"
+    assert round(v.poupanca_eur, 2) == -4.86
+
+
+def test_melhor_e_a_alternativa_mais_barata():
+    v = calcular_veredicto(_mercado(vinted_min_eur=None, novo_eu_eur=70.0), contas(4800, TAXA), TAXA, 20)
+    assert v.melhor[0] == "importar (AmiAmi)"
+    assert round(v.melhor[1], 2) == 62.51
+
+
+def test_incerto_sem_alternativas():
+    m = _mercado(novo_eu_eur=None, vinted_min_eur=None, importar_yen=None)
+    v = calcular_veredicto(m, contas(4800, TAXA), TAXA, 20)
+    assert (v.codigo, v.melhor, v.max_montra_yen) == ("incerto", None, None)
+    assert "europeus" in v.motivo
+
+
+def test_incerto_sem_cambio():
+    v = calcular_veredicto(_mercado(), contas(4800, None), None, 20)
+    assert v.codigo == "incerto"
+    assert "câmbio" in v.motivo
+
+
+def test_nao_caro_no_japao_sem_dados_ou_dentro_do_intervalo():
+    assert calcular_veredicto(_mercado(jp_max_yen=None), contas(4800, TAXA), TAXA, 20).caro_no_japao is False
+    assert calcular_veredicto(_mercado(jp_max_yen=5000.0), contas(4800, TAXA), TAXA, 20).caro_no_japao is False
