@@ -21,6 +21,8 @@ class Settings:
     max_avaliacoes_dia: int
     margem_minima: int  # em %
     cache_dias: int
+    # Avalia logo cada pedido (sem carregar em «Avaliar»).
+    auto_avaliar: bool = True
 
 
 def _int(env: Mapping[str, str], key: str, default: int | None, lo: int | None = None, hi: int | None = None):
@@ -56,4 +58,5 @@ def load_settings(
         max_avaliacoes_dia=_int(env, "MAX_AVALIACOES_DIA", 30, lo=0),
         margem_minima=_int(env, "MARGEM_MINIMA", 20, lo=0, hi=90),
         cache_dias=_int(env, "CACHE_DIAS", 30, lo=1),
+        auto_avaliar=(env.get("AUTO_AVALIAR") or "1").strip() != "0",
     )

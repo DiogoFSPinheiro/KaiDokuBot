@@ -132,3 +132,12 @@ def test_botoes_com_avaliacao(storage):
     commands = Commands(storage, Cambio(storage, FakeHttp(), now=FakeClock()), avaliacao=True)
     r = commands.texto(CHAT, "nendoroid frieren 4800")
     assert r.botoes == [[("💡 Avaliar", "av:1"), ("✏️ Corrigir", "fix:1")]]
+
+
+def test_pedido_id_so_nas_respostas_de_um_pedido(commands):
+    assert commands.texto(CHAT, "nendoroid frieren 4800").pedido_id == 1
+    assert commands.texto(CHAT, "sem preço").pedido_id is None
+    assert commands.menu_corrigir(1).pedido_id is None
+    assert commands.definir_estado(1, 0).pedido_id == 1
+    commands.pedir_campo(CHAT, 1, "preco")
+    assert commands.texto(CHAT, "5000").pedido_id == 1

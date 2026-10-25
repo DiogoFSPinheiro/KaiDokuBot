@@ -82,15 +82,37 @@ def build_application(
         storage.close()
 
     app = Application.builder().token(settings.telegram_token).post_shutdown(on_shutdown).build()
-    commands = Commands(storage, cambio, avaliacao=avaliador is not None)
+    # Com AUTO_AVALIAR cada pedido é avaliado logo; senão aparece o botão «💡 Avaliar».
+    auto = avaliador is not None and settings.auto_avaliar
+    commands = Commands(storage, cambio, avaliacao=avaliador is not None and not auto)
     if settings.allowed_chat_id is None:
         log.warning("ALLOWED_CHAT_ID não definido: envia /id ao bot e põe o valor no .env")
     allowed = filters.Chat(chat_id=[] if settings.allowed_chat_id is None else [settings.allowed_chat_id])
 
-    async def send(update: Update, r: Resposta) -> None:
-        await update.effective_message.reply_text(
+    async def send(update: Update, r: Resposta):
+        return await update.effective_message.reply_text(
             r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
         )
+
+    async def avaliar_em(mensagem, chat_id: int, pedido_id: int, forcar: bool) -> None:
+        """Avalia o pedido numa mensagem de progresso que responde a `mensagem` e acaba com o resultado."""
+        pendente = await mensagem.reply_text("🔎 A preparar a avaliação…", do_quote=True)
+        progresso = Progresso(pendente)
+        r = await avaliador.avaliar(chat_id, pedido_id, forcar, progresso)
+        await progresso.fechar()
+        try:
+            await pendente.edit_text(
+                r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
+            )
+        except BadRequest:
+            # Nunca deixar a mensagem de progresso presa: manda o resultado numa mensagem nova, sem HTML.
+            log.exception("Não consegui mostrar o resultado da avaliação %s", pedido_id)
+            await pendente.reply_text(re.sub(r"<[^>]+>", "", html.unescape(r.texto)), reply_markup=markup(r))
+
+    def avaliar_logo(context: ContextTypes.DEFAULT_TYPE, mensagem, chat_id: int, r: Resposta) -> None:
+        if auto and r.pedido_id is not None:
+            # Em segundo plano: a avaliação demora e não pode bloquear as respostas imediatas.
+            context.application.create_task(avaliar_em(mensagem, chat_id, r.pedido_id, False))
 
     async def on_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text(HELP)
@@ -121,7 +143,8 @@ def build_application(
     async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         await fechar_pedido_de_texto(context.bot, chat_id)
-        await send(update, commands.texto(chat_id, update.effective_message.text))
+        r = commands.texto(chat_id, update.effective_message.text)
+        avaliar_logo(context, await send(update, r), chat_id, r)
 
     async def edit(query, texto: str, r: Resposta) -> None:
         try:
@@ -156,9 +179,11 @@ def build_application(
                 a_pedir.pop(chat_id)
             if kind == "st":
                 r = commands.definir_estado(pedido_id, int(args[1]))
+                await edit(query, r.texto, r)
+                avaliar_logo(context, query.message, chat_id, r)
             else:
                 r = commands.cancelar(chat_id, pedido_id)
-            await edit(query, r.texto, r)
+                await edit(query, r.texto, r)
 
     app.add_handler(CommandHandler("id", on_id))
     app.add_handler(CommandHandler(["start", "help"], on_start, filters=allowed))
@@ -174,18 +199,7 @@ def build_application(
             if update.effective_chat is None or update.effective_chat.id != settings.allowed_chat_id:
                 return
             kind, pedido_id = query.data.split(":")
-            pendente = await query.message.reply_text("🔎 A preparar a avaliação…", do_quote=True)
-            progresso = Progresso(pendente)
-            r = await avaliador.avaliar(update.effective_chat.id, int(pedido_id), kind == "rv", progresso)
-            await progresso.fechar()
-            try:
-                await pendente.edit_text(
-                    r.texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=markup(r)
-                )
-            except BadRequest:
-                # Nunca deixar a mensagem de progresso presa: manda o resultado numa mensagem nova, sem HTML.
-                log.exception("Não consegui mostrar o resultado da avaliação %s", pedido_id)
-                await pendente.reply_text(re.sub(r"<[^>]+>", "", html.unescape(r.texto)), reply_markup=markup(r))
+            await avaliar_em(query.message, update.effective_chat.id, int(pedido_id), kind == "rv")
 
         # block=False: a avaliação demora minutos e não pode bloquear as respostas imediatas.
         app.add_handler(CallbackQueryHandler(on_avaliar, pattern=r"^(av|rv):\d+$", block=False))

@@ -19,6 +19,7 @@ def _cancelar(pedido_id: int) -> tuple[str, str]:
 class Resposta:
     texto: str  # HTML
     botoes: list[list[tuple[str, str]]] = field(default_factory=list)  # linhas de (rótulo, callback_data)
+    pedido_id: int | None = None  # preenchido na resposta imediata de um pedido (para a avaliação automática)
 
 
 class Commands:
@@ -39,7 +40,7 @@ class Commands:
 
     def _imediata(self, pedido_id: int, pedido: Pedido) -> Resposta:
         texto = resposta_imediata(pedido, contas(pedido.preco_yen, self._cambio.taxa()))
-        return Resposta(texto, self.botoes_pedido(pedido_id))
+        return Resposta(texto, self.botoes_pedido(pedido_id), pedido_id)
 
     def texto(self, chat_id: int, texto: str) -> Resposta:
         esperando = self._esperando.pop(chat_id, None)

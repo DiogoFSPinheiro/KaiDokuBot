@@ -12,6 +12,11 @@ def test_defaults():
     assert s.telegram_token == "t"
     assert (s.allowed_chat_id, s.db_path, s.claude_bin, s.claude_model) == (None, "kaidokubot.db", None, "sonnet")
     assert (s.max_avaliacoes_dia, s.margem_minima, s.cache_dias) == (30, 20, 30)
+    assert s.auto_avaliar is True
+
+
+def test_auto_avaliar_desligado():
+    assert load_settings({"TELEGRAM_TOKEN": "t", "AUTO_AVALIAR": "0"}, which=_no_claude).auto_avaliar is False
 
 
 def test_values_are_parsed():
