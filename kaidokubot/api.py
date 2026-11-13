@@ -22,6 +22,8 @@ log = logging.getLogger(__name__)
 
 TERMO_MAX = 100
 POR_FONTE = 5
+# Por fonte: a Vinted pode demorar 20 s a aquecer e outros 20 s nos itens; a Wintermute espera 40 s pelo todo.
+PRAZO_S = 25
 
 
 class ErroApi(Exception):
@@ -65,8 +67,9 @@ def _ou_null(resultado, nome: str):
     return resultado
 
 
-async def executar(argv: list[str], mercari, vinted, kuantokusta) -> tuple[int, dict]:
-    """(código de saída, JSON). Nunca levanta por causa do pedido nem das fontes."""
+async def executar(argv: list[str], mercari, vinted, kuantokusta, prazo_s: float = PRAZO_S) -> tuple[int, dict]:
+    """(código de saída, JSON). Nunca levanta por causa do pedido nem das fontes; uma fonte que passa de
+    `prazo_s` vem null sem estragar as outras."""
     try:
         args = _parser().parse_args(argv)
         termo = _limpo(args.termo, "termo", obrigatorio=True)
@@ -74,7 +77,9 @@ async def executar(argv: list[str], mercari, vinted, kuantokusta) -> tuple[int, 
     except ErroApi as exc:
         return 1, {"erro": str(exc)}
     m, v, k = await asyncio.gather(
-        mercari.procurar(termo_jp or termo), vinted.procurar(termo), kuantokusta.procurar(termo),
+        *(asyncio.wait_for(pedido, prazo_s) for pedido in (
+            mercari.procurar(termo_jp or termo), vinted.procurar(termo), kuantokusta.procurar(termo),
+        )),
         return_exceptions=True,
     )  # fmt: skip
     m, v, k = _ou_null(m, "Mercari"), _ou_null(v, "Vinted"), _ou_null(k, "KuantoKusta")

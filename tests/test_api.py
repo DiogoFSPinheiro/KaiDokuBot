@@ -65,6 +65,24 @@ def test_fonte_que_falha_vem_null():
     assert len(dados["kuantokusta"]) == 5
 
 
+class FonteLenta:
+    def __init__(self):
+        self.termos = []
+
+    async def procurar(self, termo):
+        self.termos.append(termo)
+        await asyncio.sleep(5)
+        return _anuncios(1)
+
+
+def test_fonte_lenta_vem_null_sem_estragar_as_outras():
+    lenta = FonteLenta()
+    codigo, dados = asyncio.run(executar(["precos", "--termo=x"], FakeMercari(), lenta, FakeFonte(), prazo_s=0.05))
+    assert codigo == 0 and lenta.termos == ["x"]
+    assert dados["vinted"] is None
+    assert len(dados["kuantokusta"]) == 5 and len(dados["mercari"]["vendidos"]) == 5
+
+
 def test_sem_resultados_e_lista_vazia():
     _codigo, dados, _ = _correr(["precos", "--termo=x"], kuantokusta=FakeFonte([]))
     assert dados["kuantokusta"] == []
