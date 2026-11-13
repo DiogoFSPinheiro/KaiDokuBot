@@ -16,6 +16,7 @@ Bot Telegram pessoal (um só `ALLOWED_CHAT_ID`) que avalia preços de merch japo
 - `fontes.py` — Mercari (`mercapi`), Vinted (cliente adaptado do VintedBot, `curl_cffi`), KuantoKusta (`__NEXT_DATA__`; 404 = sem resultados)
 - `claude.py` — `claude -p --output-format stream-json --verbose --json-schema …` numa thread (Selector loop do Windows não suporta subprocessos asyncio); imagens via `--input-format stream-json` em base64; `--bare` não serve (exige API key)
 - `vision.py` — foto → `Leitura` (a legenda ganha ao preço/estado lidos)
+- `api.py` — `python -m kaidokubot.api precos --termo=T [--termo-jp=J]`: a Wintermute vê preços (Mercari, Vinted, KuantoKusta, 5 por fonte) numa linha de JSON; só leitura, sem Telegram, Claude nem DB; fonte que falha = `null`
 
 ## Lições (não óbvias)
 - O Claude sozinho não chega a preços reais: Mercari é JS, Yahoo Auctions/Suruga-ya bloqueiam Portugal (403), Amazon/eBay bloqueiam bots. Por isso o bot vai buscar Mercari, Vinted e KuantoKusta e dá-os ao Claude com códigos (`[M1]`, `[V1]`, `[K1]`) que viram links.
