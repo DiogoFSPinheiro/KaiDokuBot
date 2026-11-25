@@ -1,77 +1,73 @@
 # KaiDokuBot
 
-買い得 (kaidoku) = "boa compra". Bot de Telegram pessoal que, de pé numa loja no Japão, diz se compensa comprar um artigo ali em vez de o comprar na Europa — e se o preço é normal para o Japão. Também serve em Portugal (preço em euros).
+買い得 (*kaidoku*) = "a good buy". Personal Telegram bot that tells you, while standing in a shop in Japan, whether an item is worth buying there instead of in Europe, and whether the price is normal for Japan. Also works in Portugal (prices in euros).
 
-> ⚠️ Usa APIs internas (não oficiais) do Mercari, da Vinted e do KuantoKusta, e o [Claude Code](https://claude.com/claude-code) com a tua subscrição. Se algum serviço mudar, essa parte deixa de funcionar até ser adaptada.
+> ⚠️ Uses internal (unofficial) APIs from Mercari, Vinted and KuantoKusta, and Claude Code with your own subscription. If any service changes, that part stops working until it is adapted.
 
-## Utilização
+## Usage
 
-**Texto** — o nome e o preço (e o estado, se souberes):
+**Text:** the name and price (and condition, if you know it):
 
-```
-nendoroid frieren 4800
-zelda totk ¥3,980 sem caixa
-4.800円 pop up parade fern selado
-kadokawa light emilia 7000 caixa ok
-```
+    nendoroid frieren 4800
+    zelda totk ¥3,980 sem caixa
+    4.800円 pop up parade fern selado
+    kadokawa light emilia 7000 caixa ok
 
-- Preço: o número com `¥`/`円`/`yen`; sem moeda, o último número que não seja uma medida (`17 cm`) nem uma escala (`1/7`).
-- Estado (pt / en / ja): selado, novo, usado, sem caixa, caixa danificada — `未開封`, `中古`, `箱なし`, `箱傷み`, `caixa ok`…
-- Escreve a **linha + personagem (+ nº)** (`nendoroid 2367`, `pop up parade fern`): é o que mais ajuda a identificar o produto.
+- **Price:** the number with ¥/円/yen; with no currency, the last number that isn't a measurement (17 cm) or a scale (1/7).
+- **Condition** (pt / en / ja): sealed, new, used, no box, damaged box: `selado`, `novo`, `usado`, `sem caixa`, `caixa danificada`, `未開封`, `中古`, `箱なし`, `箱傷み`, `caixa ok`…
+- Write the **line + character (+ number)** (`nendoroid 2367`, `pop up parade fern`): it's what helps most to identify the product.
 
-Recebes logo as contas (`¥4.800 → €27.35 em loja · €24.86 após reembolso`) e, ~30 s depois, a avaliação:
+You get the maths straight away (¥4,800 → €27.35 in store · €24.86 after refund) and, ~30 s later, the verdict (the bot replies in Portuguese):
 
-```
-🟢 Compensa · poupas €29 (54%)
-💴 Máximo ¥8.300
-🇪🇺 Vinted ~€50 (12) · novo €55 (KuantoKusta) · importar ~€63
-🇯🇵 Mercari ¥3.900–4.500 ≈ €22–26 (8) · 👀 caro aqui
-🔍 Nendoroid Frieren 2367 · ver
-[📋 Detalhes] [🔄 Reavaliar] [✏️ Corrigir]
-```
+    🟢 Compensa · poupas €29 (54%)
+    💴 Máximo ¥8.300
+    🇪🇺 Vinted ~€50 (12) · novo €55 (KuantoKusta) · importar ~€63
+    🇯🇵 Mercari ¥3.900–4.500 ≈ €22–26 (8) · 👀 caro aqui
+    🔍 Nendoroid Frieren 2367 · ver
+    [📋 Detalhes] [🔄 Reavaliar] [✏️ Corrigir]
 
-- 🟢 compensa / 🟡 pouca diferença / 🔴 não compensa face à alternativa europeia mais barata (novo, Vinted + portes, importar do Japão). Sem preços europeus, compara com os vendidos no Mercari (🟢 bom preço / 🟡 normal / 🔴 caro para o Japão).
-- «Máximo» é o preço de montra a partir do qual deixa de compensar. 👀 = acima do que se vende no Mercari: vê noutras lojas.
-- Os nomes das fontes são links para confirmares com um toque. «📋 Detalhes» mostra a razão, as fontes e os cêntimos.
-- «✏️ Corrigir» muda o nome, o preço ou o estado e volta a avaliar.
+- 🟢 worth it / 🟡 small difference / 🔴 not worth it, compared with the cheapest European alternative (new, Vinted + shipping, or importing from Japan). With no European prices, it compares with sold listings on Mercari (🟢 good price / 🟡 normal / 🔴 expensive for Japan).
+- **Máximo** is the shelf price above which it stops being worth it. 👀 = above what sells on Mercari: check other shops.
+- Source names are links, so you can confirm with one tap. **📋 Detalhes** shows the reasoning, sources and exact amounts.
+- **✏️ Corrigir** changes the name, price or condition and re-evaluates.
 
-**Foto** — da etiqueta ou da caixa, com o preço na legenda se quiseres. O bot mostra o que percebeu e só avalia quando carregas em «💡 Avaliar» (ou depois de corrigires).
+**Photo:** of the label or box, with the price in the caption if you like. The bot shows what it understood and only evaluates when you tap **💡 Avaliar** (or after you correct it).
 
-**Em Portugal** — põe o preço em euros (`nendoroid frieren 35€`, `29,99 €`): compara só com a Europa (🟢 bom preço / 🟡 normal / 🔴 caro, ±10%).
+**In Portugal:** give the price in euros (`nendoroid frieren 35€`, `29,99 €`). It compares with Europe only (🟢 good price / 🟡 normal / 🔴 expensive, ±10%).
 
-**Comandos:** `/historico` (últimas 10 avaliações), `/cambio` (`/cambio 0.0058` fixa, `/cambio auto` volta ao automático), `/help`, `/id`.
+Commands: `/historico` (last 10 evaluations), `/cambio` (`/cambio 0.0058` sets a fixed rate, `/cambio auto` goes back to automatic), `/help`, `/id`.
 
-### Contas e premissas
-- Tax-free por reembolso (desde 1/11/2026): pagas o preço de montra e o imposto (10%) é devolvido no aeroporto — `líquido = montra / 1.10`. Abaixo de ¥5.500 numa loja num dia não há reembolso (o bot avisa).
-- Importar do Japão: `(¥ / 1.10 × câmbio + €15 de portes) × 1.23 + €2.65 CTT`. Vinted: preço típico + €4 de portes.
-- Premissas em `kaidokubot/rules.py` — **confirmar antes da viagem**.
-- Câmbio do BCE (Frankfurter), atualizado 1× por dia; sem rede usa o último.
+## Calculations and assumptions
 
-### Limites
-- `MAX_AVALIACOES_DIA` (30) avaliações por dia (o dia vira à meia-noite de Tóquio); as respostas da cache não contam.
-- Cache de `CACHE_DIAS` (30) dias por artigo e estado (o veredicto é recalculado para o preço atual). «🔄 Reavaliar» força uma pesquisa nova.
+- **Tax-free by refund** (since 1/11/2026): you pay the shelf price and the tax (10%) is refunded at the airport, so net = shelf / 1.10. Below ¥5,500 per shop per day there's no refund (the bot warns you).
+- **Import from Japan:** (¥ / 1.10 × FX rate + €15 shipping) × 1.23 + €2.65 CTT fee. **Vinted:** typical price + €4 shipping.
+- Assumptions live in `kaidokubot/rules.py`. Check them before travelling.
+- **FX rate** from the ECB (via Frankfurter), updated once a day; offline, it uses the last known rate.
 
-## Instalação no Raspberry Pi
+## Limits
 
-Precisa de Python 3 com `venv` (`sudo apt install python3-venv`), de um sistema de 64 bits e do `claude` com sessão iniciada (`~/.local/bin/claude`).
+- `MAX_AVALIACOES_DIA` (30) evaluations per day (the day rolls over at midnight Tokyo time); cached answers don't count.
+- Cache of `CACHE_DIAS` (30) days per item and condition (the verdict is recalculated for the current price). **🔄 Reavaliar** forces a fresh search.
 
-1. Criar o bot no [@BotFather](https://t.me/BotFather) (`/newbot`) e copiar o token.
-2. `git clone <url do repositório> ~/bots/KaiDokuBot && cd ~/bots/KaiDokuBot`
-3. `cp .env.example .env` e preencher `TELEGRAM_TOKEN` (o resto tem valores por omissão).
-4. `./kaidokubot.sh` → enviar `/id` ao bot → pôr o número em `ALLOWED_CHAT_ID` no `.env` → Ctrl+C.
-5. `./kaidokubot.sh install` — serviço `systemd` que arranca com o Pi e reinicia se cair.
-   - Log: `journalctl -u kaidokubot -f` · Estado: `sudo systemctl status kaidokubot`
-6. Atualizar: `./deploy.sh` (git pull, dependências se mudaram, testes, e só reinicia se passarem). `./deploy.sh --force` reinicia mesmo sem alterações.
+## Installation on Raspberry Pi
 
-> Só pode haver **um** bot a correr com o mesmo token: desliga o do PC antes de ligar o do Pi (senão o Telegram dá `409 Conflict`).
+Requires Python 3 with `venv` (`sudo apt install python3-venv`), a 64-bit OS, and `claude` logged in (`~/.local/bin/claude`).
 
-## Desenvolvimento (Windows)
+1. Create the bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy the token.
+2. `git clone <repository url> ~/bots/KaiDokuBot && cd ~/bots/KaiDokuBot`
+3. `cp .env.example .env` and fill in `TELEGRAM_TOKEN` (the rest has defaults).
+4. `./kaidokubot.sh` → send `/id` to the bot → put the number in `ALLOWED_CHAT_ID` in `.env` → Ctrl+C.
+5. `./kaidokubot.sh install`: `systemd` service that starts with the Pi and restarts if it crashes.
+   - Logs: `journalctl -u kaidokubot -f` · Status: `sudo systemctl status kaidokubot`
+6. Update: `./deploy.sh` (git pull, dependencies if they changed, tests, and only restarts if they pass). `./deploy.sh --force` restarts even with no changes.
 
-```
-python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pytest -q
-.venv\Scripts\python -m kaidokubot.main
-```
+> Only **one** bot can run with the same token: stop the one on your PC before starting the one on the Pi (otherwise Telegram returns `409 Conflict`).
 
-Desenho e decisões: `docs/superpowers/specs/2026-10-25-kaidokubot-design.md`.
+## Development (Windows)
+
+    python -m venv .venv
+    .venv\Scripts\python -m pip install -r requirements.txt
+    .venv\Scripts\python -m pytest -q
+    .venv\Scripts\python -m kaidokubot.main
+
+Design and decisions: `docs/superpowers/specs/2026-10-25-kaidokubot-design.md`.
